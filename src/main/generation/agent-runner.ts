@@ -451,6 +451,8 @@ export const planDeckWithLLM = async (args: {
       return {
         title,
         contentOutline: normalizeOutlineText(keyPoints.join('；')),
+        // 保留规划 keyPoints：锁定版式模式按列表槽容量取用
+        items: keyPoints.slice(0, 8),
         layoutIntent,
         contentStructure,
         moduleCount,

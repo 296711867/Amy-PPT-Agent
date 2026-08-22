@@ -283,3 +283,58 @@ export function queryLayoutAssets(
   }
   return pool.slice(0, limit)
 }
+
+export type OutlineLayoutInput = {
+  moduleCount?: number
+  items?: string[]
+}
+
+/**
+ * 整 deck 版式分配：按页位定角色（首页 cover、末页 ending、正文 content），
+ * 按 moduleCount/要点数匹配容量，整 deck 不重复。
+ * 列表槽版式要求要点数 ≥ minItems；配不上的页返回 null（回退自由创作）。
+ */
+export function assignLayoutAssetsToOutline(
+  outline: readonly OutlineLayoutInput[],
+  assets: readonly LayoutAsset[],
+  options: { slideSizeId?: string; seed?: string } = {}
+): Array<LayoutAsset | null> {
+  const used = new Set<string>()
+  const result: Array<LayoutAsset | null> = []
+  const itemCount = (item: OutlineLayoutInput): number =>
+    Array.isArray(item.items) ? item.items.filter((value) => value.trim()).length : 0
+
+  outline.forEach((item, index) => {
+    const roles =
+      index === 0
+        ? ['cover']
+        : index === outline.length - 1 && outline.length > 1
+          ? ['ending']
+          : ['content']
+    const itemTotal = itemCount(item)
+
+    const pickFrom = (candidateRoles: string[]): LayoutAsset | null => {
+      const candidates = queryLayoutAssets(assets, {
+        roles: candidateRoles,
+        moduleCount: item.moduleCount,
+        slideSizeId: options.slideSizeId,
+        excludeIds: Array.from(used),
+        limit: 8,
+        seed: options.seed ? `${options.seed}:${index}` : undefined
+      })
+      for (const asset of candidates) {
+        const listSlots = asset.slots.filter((slot) => slot.kind === 'list') as LayoutAssetListSlot[]
+        const needsItems = listSlots.some((slot) => slot.minItems > itemTotal)
+        if (needsItems) continue
+        used.add(asset.id)
+        return asset
+      }
+      return null
+    }
+
+    // cover/ending 候选不足时回退 content 版式，尽量让每页都能锁定
+    const assigned = pickFrom(roles) ?? (roles[0] !== 'content' ? pickFrom(['content']) : null)
+    result.push(assigned)
+  })
+  return result
+}

@@ -81,6 +81,7 @@ interface SessionStore {
     referenceDocumentPath?: string
     fontSelection?: FontSelection
     imagePolicy?: import('@shared/generation').ImagePolicy
+    generationMode?: import('@shared/generation').GenerationMode
     deckBackgroundPolicy?: import('@shared/generation').DeckBackgroundPolicy
     sourcePlan?: SourceDocumentPlan
   }) => Promise<string>

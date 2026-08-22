@@ -148,6 +148,7 @@ interface GenerationConfirmDialogProps {
     referenceDocumentPath: string
     sourcePlan?: SourceDocumentPlan
     imagePolicy: import('@shared/generation').ImagePolicy
+    generationMode: import('@shared/generation').GenerationMode
     deckBackgroundPolicy: import('@shared/generation').DeckBackgroundPolicy
     modelConfigId?: string
   }) => void
@@ -173,6 +174,7 @@ export function GenerationConfirmDialog({
   const [fontSelection, setFontSelection] = useState<FontSelection>({ mode: 'auto' })
   const [slideSizeId, setSlideSizeId] = useState<SlideSizePresetId>(DEFAULT_SLIDE_SIZE_ID)
   const [generateImagesWithAi, setGenerateImagesWithAi] = useState(false)
+  const [useLockedLayouts, setUseLockedLayouts] = useState(false)
   const [generateDeckBackgrounds, setGenerateDeckBackgrounds] = useState(false)
   const [generateCoverBackground, setGenerateCoverBackground] = useState(true)
   const [generateContentBackgrounds, setGenerateContentBackgrounds] = useState(true)
@@ -253,6 +255,7 @@ export function GenerationConfirmDialog({
             ? prepared.sourcePlan
             : undefined,
         imagePolicy: generateImagesWithAi ? 'ai' : 'placeholder',
+        generationMode: useLockedLayouts ? 'locked' : 'creative',
         deckBackgroundPolicy: {
           enabled: generateDeckBackgrounds,
           coverEnabled: generateCoverBackground,
@@ -435,6 +438,44 @@ export function GenerationConfirmDialog({
                 <span className="block text-xs font-medium">{t('home.imageModeAi')}</span>
                 <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
                   {t('home.generateImagesWithAiHint')}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-medium">{t('home.generationModeLabel')}</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setUseLockedLayouts(true)}
+                className={`rounded-md border p-3 text-left transition-colors ${
+                  useLockedLayouts
+                    ? 'border-primary bg-[var(--ui-action-soft)]/45'
+                    : 'border-border bg-muted/30 hover:border-[var(--ui-focus)]'
+                }`}
+              >
+                <span className="block text-xs font-medium">
+                  {t('home.generationModeLocked')}
+                </span>
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  {t('home.generationModeLockedHint')}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseLockedLayouts(false)}
+                className={`rounded-md border p-3 text-left transition-colors ${
+                  !useLockedLayouts
+                    ? 'border-primary bg-[var(--ui-action-soft)]/45'
+                    : 'border-border bg-muted/30 hover:border-[var(--ui-focus)]'
+                }`}
+              >
+                <span className="block text-xs font-medium">
+                  {t('home.generationModeCreative')}
+                </span>
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  {t('home.generationModeCreativeHint')}
                 </span>
               </button>
             </div>

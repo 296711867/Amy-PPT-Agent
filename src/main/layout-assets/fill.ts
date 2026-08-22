@@ -14,13 +14,22 @@ export type LayoutFillContent = {
   media?: Array<{ src: string }>
 }
 
+/** 无数据指标槽置为占位横线，避免残留模板示例数字。 */
+export const blankMetricSlots = (asset: LayoutAsset, html: string): string => {
+  let next = html
+  for (const slot of asset.slots) {
+    if (slot.kind === 'metric') next = replaceBlockInner(next, slot.slotId, '—')
+  }
+  return next
+}
+
 const escapeAttr = (value: string): string => value.replace(/"/g, '&quot;')
 
 const blockOpenRe = (slotId: string): RegExp =>
   new RegExp(`(<(section|figure)\\b[^>]*\\bdata-block-id="${slotId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>)`, 'i')
 
 /** 替换一个文本块的内部内容（保留块本身的样式与属性）。 */
-const replaceBlockInner = (html: string, slotId: string, nextInner: string): string => {
+export const replaceBlockInner = (html: string, slotId: string, nextInner: string): string => {
   const blockRe = new RegExp(
     `(<(section|figure)\\b[^>]*\\bdata-block-id="${slotId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>)([\\s\\S]*?)<\\/\\2>`,
     'i'

@@ -74,6 +74,7 @@ export type GenerationRunContext = {
   modelRuntime: ModelRuntimeConfig
   modelTimeouts: Record<ModelTimeoutProfile, number>
   pageConcurrency: CommonGenerationContext['pageConcurrency']
+  generationMode: import('@shared/generation').GenerationMode
   providerBaseUrl: string
   projectId: string
   messageScope: GenerateChatType

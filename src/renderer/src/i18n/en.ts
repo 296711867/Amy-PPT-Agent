@@ -258,6 +258,13 @@ export const en = {
     imageModeLabel: 'Illustration mode',
     imageModeAi: 'AI-generated visuals',
     imageModePlaceholder: 'Image placeholders',
+    generationModeLabel: 'Generation mode',
+    generationModeLocked: 'Locked layouts (fast)',
+    generationModeLockedHint:
+      'Fill content directly into layouts harvested from your uploaded templates - fast and structurally stable; unmatched pages fall back to creative mode. Import a PPTX on the Templates page first to build the library.',
+    generationModeCreative: 'Creative',
+    generationModeCreativeHint:
+      'AI designs every slide in the selected style; freer expression, slower.',
     imageModePlaceholderHint:
       'No image model needed. Image layouts get replaceable semantic placeholder blocks (subject notes + swap hint) you can replace manually or with AI later.',
     generateDeckBackgrounds: 'Generate PPT backgrounds',

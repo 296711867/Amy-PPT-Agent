@@ -28,6 +28,8 @@ export interface OutlineItem {
   layoutId?: UniversalLayoutId | string
   layoutPrompt?: string
   imagePolicy?: ImagePolicy
+  /** 规划期 keyPoints（短要点原文），锁定版式模式下列表槽的数据源。 */
+  items?: string[]
   imageAssetPath?: string
   imageAssetPaths?: string[]
   /** Reusable full-canvas background assigned from the deck background package. */
@@ -105,6 +107,17 @@ export const resolvePlannedVisualFormat = (
   (layoutIntent ? LAYOUT_INTENT_VISUAL_FORMAT_FALLBACK[layoutIntent] : undefined)
 
 export type ImagePolicy = 'placeholder' | 'ai'
+
+/**
+ * 生成方式：
+ * - creative：现有自由创作，Agent 逐页写 HTML
+ * - locked：锁定版式优先 —— 规划出的内容按版式契约确定性填充，
+ *   匹配不到合适版式的页面自动回退自由创作
+ */
+export type GenerationMode = 'creative' | 'locked'
+
+export const normalizeGenerationMode = (value: unknown): GenerationMode =>
+  value === 'locked' ? 'locked' : 'creative'
 
 /**
  * 图片占位符模式下，所有图片槽位统一指向的占位资源路径。

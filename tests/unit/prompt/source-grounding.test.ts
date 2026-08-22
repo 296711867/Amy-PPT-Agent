@@ -227,7 +227,7 @@ describe('source-grounded prompt rules', () => {
     const retryFlow = readSource('src/main/generation/retry-flow.ts')
     const retrySinglePageFlow = readSource('src/main/generation/retry-single-page-flow.ts')
 
-    expect(deckFlow).toContain('agentSummary.trim() || fallbackCompletionSummary')
+    expect(deckFlow).toContain('summary.trim() || fallbackCompletionSummary')
     expect(editFlow).toContain('emitSuccessfulEditSummary(context, editSummary, emitAssistant)')
     expect(editFlow).not.toContain('editSummaryFromEngine')
     expect(batchEditFlow).toContain(

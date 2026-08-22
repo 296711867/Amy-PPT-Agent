@@ -14,6 +14,7 @@ import {
   normalizeAnimationPreferences,
   normalizeDeckBackgroundPolicy,
   normalizeFontSelection,
+  normalizeGenerationMode,
   normalizeImagePolicy,
   normalizeSessionPageEditPlan,
   normalizeSelectPageIds
@@ -224,6 +225,7 @@ export type CommonGenerationContext = {
   appLocale: 'zh' | 'en'
   fontSelection: FontSelection
   imagePolicy: import('@shared/generation').ImagePolicy
+  generationMode: import('@shared/generation').GenerationMode
   deckBackgroundPolicy: import('@shared/generation').DeckBackgroundPolicy
   sourcePlan: SourceDocumentPlan | null
   projectId: string
@@ -661,6 +663,7 @@ export async function resolveCommonContext(
     appLocale,
     fontSelection: normalizeFontSelection(sessionMetadata.fontSelection),
     imagePolicy: normalizeImagePolicy(sessionMetadata.imagePolicy),
+    generationMode: normalizeGenerationMode(sessionMetadata.generationMode),
     deckBackgroundPolicy: normalizeDeckBackgroundPolicy(sessionMetadata.deckBackgroundPolicy),
     sourcePlan,
     projectId,

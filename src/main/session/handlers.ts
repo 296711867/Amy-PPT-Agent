@@ -11,6 +11,7 @@ import { readAppLocale, uiText } from '../config/locale-utils'
 import {
   normalizeDeckBackgroundPolicy,
   normalizeFontSelection,
+  normalizeGenerationMode,
   normalizeImagePolicy
 } from '@shared/generation'
 import { requireSlideSizePreset } from '@shared/slide-size'
@@ -485,6 +486,7 @@ export function registerSessionHandlers(
     const slideSize = requireSlideSizePreset(record.slideSizeId)
     const fontSelection = normalizeFontSelection(record.fontSelection)
     const imagePolicy = normalizeImagePolicy(record.imagePolicy)
+    const generationMode = normalizeGenerationMode(record.generationMode)
     const deckBackgroundPolicy = normalizeDeckBackgroundPolicy(record.deckBackgroundPolicy)
     const sourcePlan = normalizeSourcePlan(record.sourcePlan)
     const referenceDocumentPath =
@@ -675,6 +677,7 @@ export function registerSessionHandlers(
         ...(aiStyleSelection ? { styleSelection: aiStyleSelection } : {}),
         fontSelection,
         imagePolicy,
+        generationMode,
         deckBackgroundPolicy,
         ...(isThinkingSource ? { source: 'thinking' } : {})
       })

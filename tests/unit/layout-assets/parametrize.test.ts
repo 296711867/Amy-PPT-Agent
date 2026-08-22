@@ -9,6 +9,7 @@ import { fillLayoutAsset } from '../../../src/main/layout-assets/fill'
 import {
   normalizeLayoutAsset,
   queryLayoutAssets,
+  assignLayoutAssetsToOutline,
   type LayoutAsset
 } from '../../../src/shared/layout-asset'
 
@@ -216,5 +217,94 @@ describe('queryLayoutAssets', () => {
     const first = queryLayoutAssets(pool, { limit: 3, seed: 'deck-1' })
     const second = queryLayoutAssets(pool, { limit: 3, seed: 'deck-1' })
     expect(first.map((asset) => asset.id)).toEqual(second.map((asset) => asset.id))
+  })
+})
+
+describe('assignLayoutAssetsToOutline', () => {
+  const makeAsset = (id: string, roles: string[], moduleMax: number): LayoutAsset =>
+    normalizeLayoutAsset({
+      id,
+      version: 1,
+      source: 'template',
+      roles,
+      slideSizeId: 'wide-16-9',
+      title: `版式 ${id}`,
+      skeletonPath: `skeletons/${id}.html`,
+      slots: [
+        { kind: 'title', slotId: 't', maxChars: 20, sample: 'x' },
+        {
+          kind: 'list',
+          slotId: 'l',
+          itemSlotIds: ['a', 'b', 'c'].map((x) => `${id}-${x}`),
+          minItems: 2,
+          maxItems: moduleMax,
+          perItemMaxChars: 10,
+          sample: ['a', 'b']
+        }
+      ],
+      capacity: { titleMaxChars: 20, moduleMin: 2, moduleMax, mediaSlots: 0, hasChart: false },
+      structureFingerprint: `v1-${id}`
+    })!
+
+  const library = [
+    makeAsset('cover-a', ['cover'], 3),
+    makeAsset('content-a', ['content'], 3),
+    makeAsset('content-b', ['content'], 4),
+    makeAsset('ending-a', ['ending'], 3)
+  ]
+
+  it('assigns cover/content/ending by position without reuse and falls back to content', () => {
+    const outline = [
+      { moduleCount: 3, items: ['a', 'b', 'c'] },
+      { moduleCount: 3, items: ['a', 'b', 'c'] },
+      { moduleCount: 3, items: ['a', 'b', 'c'] }
+    ]
+    const assigned = assignLayoutAssetsToOutline(outline, library, { seed: 's' })
+    expect(assigned[0]?.roles).toContain('cover')
+    expect(assigned[1]?.roles).toContain('content')
+    expect(assigned[2]?.roles).toContain('ending')
+    // 整 deck 不重复
+    const ids = assigned.filter(Boolean).map((asset) => asset!.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('leaves pages null when items cannot satisfy list capacity', () => {
+    const assigned = assignLayoutAssetsToOutline(
+      [{ moduleCount: 3, items: ['only-one'] }],
+      library,
+      { seed: 's' }
+    )
+    // 唯一列表版式 minItems=2，单要点配不上
+    expect(assigned[0]).toBeNull()
+  })
+
+  it('returns all null for an empty library (creative fallback)', () => {
+    const assigned = assignLayoutAssetsToOutline(
+      [
+        { moduleCount: 3, items: ['a', 'b', 'c'] },
+        { moduleCount: 3, items: ['a', 'b', 'c'] }
+      ],
+      [],
+      { seed: 's' }
+    )
+    expect(assigned).toEqual([null, null])
+  })
+})
+
+describe('blankMetricSlots', () => {
+  it('replaces metric samples with a dash to avoid fabricated numbers', async () => {
+    const { blankMetricSlots } = await import('../../../src/main/layout-assets/fill')
+    const asset = buildLayoutAssetFromPageHtml({
+      html: fixturePage,
+      id: 'layout-metric',
+      title: 'm',
+      roles: ['content'],
+      slideSizeId: 'wide-16-9',
+      source: 'template',
+      skeletonPath: 'skeletons/m.html'
+    })!
+    const blanked = blankMetricSlots(asset, fixturePage)
+    expect(blanked).toContain('—')
+    expect(blanked).not.toContain('42.7%')
   })
 })

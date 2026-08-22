@@ -242,6 +242,12 @@ export const zh = {
     imageModeLabel: '插图方式',
     imageModeAi: 'AI 生成配图',
     imageModePlaceholder: '图片占位符',
+    generationModeLabel: '生成方式',
+    generationModeLocked: '锁定版式（快）',
+    generationModeLockedHint:
+      '优先用已上传模板沉淀的版式直接填充内容，速度快、结构稳；配不上的页面自动回退自由创作。需要先在模板页导入 PPTX 积累版式。',
+    generationModeCreative: '自由创作',
+    generationModeCreativeHint: '由 AI 按所选风格逐页设计，表达更自由，耗时更长。',
     imageModePlaceholderHint:
       '不调用生图模型。需要图片的版式会生成带语义描述的可替换占位块（标注画面主题与替换提示），稍后可手动或用 AI 替换。',
     generateDeckBackgrounds: '生成 PPT 背景图',

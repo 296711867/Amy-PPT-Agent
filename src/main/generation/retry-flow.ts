@@ -108,6 +108,7 @@ export async function resolveRetryContext(
     appLocale: common.appLocale,
     fontSelection: common.fontSelection,
     imagePolicy: common.imagePolicy,
+    generationMode: common.generationMode,
     deckBackgroundPolicy: common.deckBackgroundPolicy,
     animationPreferences
   }

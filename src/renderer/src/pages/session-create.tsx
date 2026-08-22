@@ -111,6 +111,7 @@ export function SessionCreatePage(): ReactElement {
   const [pageCount, setPageCount] = useState(String(DEFAULT_PAGE_COUNT))
   const [slideSizeId, setSlideSizeId] = useState<SlideSizePresetId>(DEFAULT_SLIDE_SIZE_ID)
   const [generateImagesWithAi, setGenerateImagesWithAi] = useState(false)
+  const [useLockedLayouts, setUseLockedLayouts] = useState(false)
   const [generateDeckBackgrounds, setGenerateDeckBackgrounds] = useState(false)
   const [generateCoverBackground, setGenerateCoverBackground] = useState(true)
   const [generateContentBackgrounds, setGenerateContentBackgrounds] = useState(true)
@@ -315,6 +316,7 @@ export function SessionCreatePage(): ReactElement {
         sourcePlan: acceptedSourcePlan,
         fontSelection,
         imagePolicy: generateImagesWithAi ? 'ai' : 'placeholder',
+        generationMode: useLockedLayouts ? 'locked' : 'creative',
         deckBackgroundPolicy: {
           enabled: generateDeckBackgrounds,
           coverEnabled: generateCoverBackground,
@@ -1009,6 +1011,46 @@ export function SessionCreatePage(): ReactElement {
                       </span>
                       <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
                         {t('home.generateImagesWithAiHint')}
+                      </span>
+                    </button>
+                  </div>
+                </section>
+
+                <section>
+                  <label className="mb-2 block text-xs font-medium text-foreground">
+                    {t('home.generationModeLabel')}
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setUseLockedLayouts(true)}
+                      className={`rounded-md border p-3 text-left transition-colors ${
+                        useLockedLayouts
+                          ? 'border-primary bg-[var(--ui-action-soft)]/45'
+                          : 'border-[var(--ui-border-strong)]/70 bg-[var(--ui-surface-elevated)]/60 hover:border-[var(--ui-focus)]'
+                      }`}
+                    >
+                      <span className="block text-xs font-medium text-foreground">
+                        {t('home.generationModeLocked')}
+                      </span>
+                      <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                        {t('home.generationModeLockedHint')}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseLockedLayouts(false)}
+                      className={`rounded-md border p-3 text-left transition-colors ${
+                        !useLockedLayouts
+                          ? 'border-primary bg-[var(--ui-action-soft)]/45'
+                          : 'border-[var(--ui-border-strong)]/70 bg-[var(--ui-surface-elevated)]/60 hover:border-[var(--ui-focus)]'
+                      }`}
+                    >
+                      <span className="block text-xs font-medium text-foreground">
+                        {t('home.generationModeCreative')}
+                      </span>
+                      <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                        {t('home.generationModeCreativeHint')}
                       </span>
                     </button>
                   </div>

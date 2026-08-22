@@ -399,6 +399,7 @@ export async function resolveEditContext(
     appLocale: common.appLocale,
     fontSelection: common.fontSelection,
     imagePolicy: common.imagePolicy,
+    generationMode: common.generationMode,
     deckBackgroundPolicy: common.deckBackgroundPolicy,
     animationPreferences: null
   }

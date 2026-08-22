@@ -30,6 +30,9 @@ import { canUseSourcePlanDirectly, mapSourcePlanToOutlineItems } from './source-
 import { retireActiveSessionPagesForReplacement } from './session-page-replacement'
 import { prepareDeckImageAssets } from './deck-images'
 import { assignDeckBackgroundAssets, prepareDeckBackgroundAssets } from './deck-backgrounds'
+import { assignLayoutAssetsToOutline } from '@shared/layout-asset'
+import { blankMetricSlots, fillLayoutAsset } from '../layout-assets/fill'
+import { readLayoutManifest, readLayoutSkeleton } from '../layout-assets/library'
 import { diversifyUniversalLayoutSequence } from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
@@ -117,6 +120,7 @@ export async function resolveDeckContext(
     appLocale: common.appLocale,
     fontSelection: common.fontSelection,
     imagePolicy: common.imagePolicy,
+    generationMode: common.generationMode,
     deckBackgroundPolicy: common.deckBackgroundPolicy,
     animationPreferences: input.animationPreferences
   }
@@ -188,8 +192,6 @@ export async function executeDeckGeneration(
     const fallbackTitle = context.userProvidedOutlineTitles[index] || `Slide ${pageNumber}`
     return { id, pageNumber, title: fallbackTitle, pageId, htmlPath }
   })
-  const pageFileMap = Object.fromEntries(pageRefs.map((page) => [page.pageId, page.htmlPath]))
-  const pageNumbers = Object.fromEntries(pageRefs.map((page) => [page.pageId, page.pageNumber]))
   const indexPath = path.join(context.projectDir, 'index.html')
   await db.createGenerationRun({
     id: context.runId,
@@ -399,12 +401,39 @@ export async function executeDeckGeneration(
       })
   })
   const outlineWithBackgrounds = assignDeckBackgroundAssets(plannedOutline, backgroundManifest)
+  // 锁定版式模式：整 deck 分配版式资产；配不上的页自动回退自由创作。
+  const lockedAssignments =
+    context.generationMode === 'locked'
+      ? await readLayoutManifest().then((manifest) =>
+          manifest.assets.length === 0
+            ? []
+            : assignLayoutAssetsToOutline(plannedOutline, manifest.assets, {
+                slideSizeId: context.slideSize.id,
+                seed: context.runId
+              })
+        )
+      : []
+  const lockedPageIds = new Set(
+    pageRefs
+      .filter((_page, index) => Boolean(lockedAssignments[index]))
+      .map((page) => page.pageId)
+  )
+  if (lockedPageIds.size > 0) {
+    log.info('[generate:deck] locked layout mode assigned', {
+      sessionId: context.sessionId,
+      lockedPages: lockedPageIds.size,
+      totalPages: pageRefs.length
+    })
+  }
   const outlineItems = await prepareDeckImageAssets({
     db,
     decryptApiKey: ctx.credentials.decryptApiKey,
     projectDir: context.projectDir,
     imagePolicy: context.imagePolicy,
-    outlineItems: outlineWithBackgrounds,
+    // 锁定页使用版式自带视觉，清除通用 layoutId 避免为其准备/生成配图
+    outlineItems: outlineWithBackgrounds.map((item, index) =>
+      lockedAssignments[index] ? { ...item, layoutId: undefined } : item
+    ),
     signal: context.abortSignal,
     onStatus: ({ pageNumber, state, detail }) =>
       emitDeckChunk({
@@ -643,12 +672,79 @@ export async function executeDeckGeneration(
     await persistGenerationSnapshotMetadata()
   }
 
-  const {
-    summary: agentSummary,
-    failedPages,
-    pendingPages,
-    pause
-  } = await runDeepAgentDeckGeneration({
+  // 锁定版式页：读骨架 → 确定性填充 → 落盘并按完成页记录（不经过 LLM）。
+  // 单页填充失败自动降级为自由创作页。
+  const skeletonCache = new Map<string, string>()
+  for (let index = 0; index < pageRefs.length; index += 1) {
+    const assigned = lockedAssignments[index]
+    const page = pageRefs[index]
+    if (!assigned) continue
+    try {
+      let skeleton = skeletonCache.get(assigned.id)
+      if (skeleton === undefined) {
+        skeleton = await readLayoutSkeleton(assigned)
+        skeletonCache.set(assigned.id, skeleton)
+      }
+      const outline = outlineItems[index]
+      const listSlot = assigned.slots.find((slot) => slot.kind === 'list') as
+        | { kind: 'list'; maxItems: number }
+        | undefined
+      const rawItems = Array.isArray(outline.items) ? outline.items : []
+      const listItems = listSlot ? rawItems.slice(0, listSlot.maxItems) : []
+      const leftover = listSlot ? rawItems.slice(listSlot.maxItems) : []
+      const body = [outline.contentOutline, ...leftover].filter(Boolean).join('；')
+      let filled = fillLayoutAsset(assigned, skeleton, {
+        title: outline.title,
+        body,
+        listItems
+      })
+      filled = blankMetricSlots(assigned, filled)
+      await fs.promises.writeFile(page.htmlPath, filled, 'utf-8')
+      await persistCompletedGeneratedPage({
+        pageNumber: page.pageNumber,
+        pageId: page.pageId,
+        title: page.title,
+        contentOutline: outline.contentOutline,
+        layoutIntent: outline.layoutIntent,
+        htmlPath: page.htmlPath
+      })
+    } catch (layoutError) {
+      lockedPageIds.delete(page.pageId)
+      log.warn('[generate:deck] locked layout fill failed; falling back to creative', {
+        sessionId: context.sessionId,
+        pageId: page.pageId,
+        layoutId: assigned.id,
+        message: layoutError instanceof Error ? layoutError.message : String(layoutError)
+      })
+    }
+  }
+  if (lockedPageIds.size > 0) {
+    emitDeckChunk({
+      type: 'llm_status',
+      payload: {
+        runId: context.runId,
+        stage: 'rendering',
+        label: progressText(context.appLocale, 'generating'),
+        progress: 12,
+        totalPages: pageRefs.length,
+        detail: uiText(
+          context.appLocale,
+          `已按版式快速生成 ${lockedPageIds.size} 页，其余页面继续自由创作`,
+          `${lockedPageIds.size} slides were generated from locked layouts; the rest continue in creative mode`
+        )
+      }
+    })
+  }
+
+  const llmPageRefs = pageRefs.filter((page) => !lockedPageIds.has(page.pageId))
+  let agentOutcome: {
+    summary: string
+    failedPages: Array<{ pageId: string; title: string; reason: string }>
+    pendingPages: Array<{ pageId: string; title: string }>
+    pause: Awaited<ReturnType<typeof runDeepAgentDeckGeneration>>['pause']
+  } = { summary: '', failedPages: [], pendingPages: [], pause: null }
+  if (llmPageRefs.length > 0) {
+    agentOutcome = await runDeepAgentDeckGeneration({
     sessionId: context.sessionId,
     provider: context.provider,
     apiKey: context.apiKey,
@@ -672,35 +768,50 @@ export async function executeDeckGeneration(
     userMessage: context.userMessage,
     outlineTitles,
     outlineItems,
-    pageTasks: pageRefs.map((page, index) => ({
+    pageTasks: llmPageRefs.map((page) => ({
       pageNumber: page.pageNumber,
       pageId: page.pageId,
       title: page.title,
-      contentOutline: outlineItems[index]?.contentOutline || '',
-      layoutIntent: outlineItems[index]?.layoutIntent,
-      contentStructure: outlineItems[index]?.contentStructure,
-      moduleCount: outlineItems[index]?.moduleCount,
-      visualAspect: outlineItems[index]?.visualAspect,
-      contentDensity: outlineItems[index]?.contentDensity,
-      layoutId: outlineItems[index]?.layoutId,
-      imageAssetPath: outlineItems[index]?.imageAssetPath,
-      imageAssetPaths: outlineItems[index]?.imageAssetPaths,
-      backgroundAsset: outlineItems[index]?.backgroundAsset
+      contentOutline: outlineItems[page.pageNumber - 1]?.contentOutline || '',
+      layoutIntent: outlineItems[page.pageNumber - 1]?.layoutIntent,
+      contentStructure: outlineItems[page.pageNumber - 1]?.contentStructure,
+      moduleCount: outlineItems[page.pageNumber - 1]?.moduleCount,
+      visualAspect: outlineItems[page.pageNumber - 1]?.visualAspect,
+      contentDensity: outlineItems[page.pageNumber - 1]?.contentDensity,
+      visualFormat: outlineItems[page.pageNumber - 1]?.visualFormat,
+      audienceMove: outlineItems[page.pageNumber - 1]?.audienceMove,
+      layoutId: outlineItems[page.pageNumber - 1]?.layoutId,
+      imageAssetPath: outlineItems[page.pageNumber - 1]?.imageAssetPath,
+      imageAssetPaths: outlineItems[page.pageNumber - 1]?.imageAssetPaths,
+      backgroundAsset: outlineItems[page.pageNumber - 1]?.backgroundAsset
     })),
     sourceDocumentPaths: context.sourceDocumentPaths,
     generationMode: 'generate',
     designContract,
     projectDir: context.projectDir,
     indexPath,
-    pageFileMap,
-    pageNumbers,
+    pageFileMap: Object.fromEntries(
+      llmPageRefs.map((page) => [page.pageId, page.htmlPath])
+    ),
+    pageNumbers: Object.fromEntries(llmPageRefs.map((page) => [page.pageId, page.pageNumber])),
     agentManager,
     emit: (chunk) => emitDeckChunk(chunk),
     onPageCompleted: persistCompletedGeneratedPage,
     onPageFailed: persistFailedGeneratedPage,
     runId: context.runId,
     signal: context.abortSignal
-  })
+    })
+  }
+  const { summary: agentSummary, failedPages, pendingPages, pause } = agentOutcome
+  const lockedSummary =
+    lockedPageIds.size > 0
+      ? uiText(
+          context.appLocale,
+          `其中 ${lockedPageIds.size} 页按模板版式快速生成；`,
+          `${lockedPageIds.size} slides were generated from locked template layouts; `
+        )
+      : ''
+  const summary = lockedSummary + agentSummary
 
   if (pause) {
     const existingSessionPages = await db.listSessionPages(context.sessionId, {
@@ -1067,7 +1178,7 @@ export async function executeDeckGeneration(
           `演示已生成完成。共 ${pageDescriptors.length} 页，主题「${context.topic}」。`,
           `The presentation has been generated. It has ${pageDescriptors.length} pages for "${context.topic}".`
         )
-  await emitAssistant(context, agentSummary.trim() || fallbackCompletionSummary)
+  await emitAssistant(context, summary.trim() || fallbackCompletionSummary)
 
   // 渲染级视觉自检：非阻塞的信息性评审（内部全量容错，任何失败只降级提示）。
   await runVisualDeckReview({

@@ -294,6 +294,7 @@ export function ThinkingDetailPage(): ReactElement {
     referenceDocumentPath: string
     sourcePlan?: SourceDocumentPlan
     imagePolicy: import('@shared/generation').ImagePolicy
+    generationMode: import('@shared/generation').GenerationMode
     deckBackgroundPolicy: import('@shared/generation').DeckBackgroundPolicy
     modelConfigId?: string
   }): Promise<void> => {
@@ -309,6 +310,7 @@ export function ThinkingDetailPage(): ReactElement {
         referenceDocumentPath: params.referenceDocumentPath,
         fontSelection: params.fontSelection,
         imagePolicy: params.imagePolicy,
+        generationMode: params.generationMode,
         deckBackgroundPolicy: params.deckBackgroundPolicy,
         sourcePlan: params.sourcePlan
       })
