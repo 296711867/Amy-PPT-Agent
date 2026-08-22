@@ -78,6 +78,8 @@ export type LayoutAsset = {
 export type LayoutAssetManifest = {
   version: 1
   assets: LayoutAsset[]
+  /** 内置版式最近一次播种的版本；与当前版本不同则重播。 */
+  builtinSeededVersion?: number
 }
 
 export type LayoutAssetQueryRequest = {

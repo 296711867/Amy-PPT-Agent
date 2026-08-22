@@ -3,6 +3,7 @@ import log from 'electron-log/main.js'
 import type { IpcContext } from '../ipc/context'
 import {
   deleteLayoutAsset,
+  ensureLayoutLibrary,
   importLayoutAssetsFromSession,
   readLayoutManifest,
   resolveLayoutLibraryPath
@@ -11,6 +12,7 @@ import {
 /** 版式库 IPC：列表 / 从会话导入 / 删除。 */
 export function registerLayoutAssetHandlers(ctx: IpcContext): void {
   ipcMain.handle('layoutAssets:list', async () => {
+    await ensureLayoutLibrary()
     const manifest = await readLayoutManifest()
     return {
       libraryPath: resolveLayoutLibraryPath(),

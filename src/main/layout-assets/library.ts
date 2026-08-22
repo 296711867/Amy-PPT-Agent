@@ -15,6 +15,7 @@ import {
 } from '@shared/layout-asset'
 import { allowLocalAssetRoot } from '../io/local-asset-roots'
 import { buildLayoutAssetFromPageHtml } from './parametrize'
+import { seedBuiltinLayoutAssets } from './builtin'
 
 const layoutIdGen = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 12)
 
@@ -38,6 +39,14 @@ export async function ensureLayoutLibrary(libraryRoot = resolveLayoutLibraryPath
     )
   }
   allowLocalAssetRoot(libraryRoot)
+  // 播种/升级内置基础版式（版本变化时重播后落盘）
+  const manifest = await readLayoutManifest(libraryRoot)
+  const result = await seedBuiltinLayoutAssets({
+    manifest,
+    libraryRoot,
+    skeletonDir: SKELETON_DIR
+  })
+  if (result.seeded > 0) await writeLayoutManifest(libraryRoot, manifest)
 }
 
 export async function readLayoutManifest(
@@ -45,11 +54,13 @@ export async function readLayoutManifest(
 ): Promise<LayoutAssetManifest> {
   try {
     const raw = await fs.promises.readFile(manifestPath(libraryRoot), 'utf-8')
-    const parsed = JSON.parse(raw) as { assets?: unknown }
+    const parsed = JSON.parse(raw) as { assets?: unknown; builtinSeededVersion?: unknown }
     const assets = (Array.isArray(parsed.assets) ? parsed.assets : [])
       .map(normalizeLayoutAsset)
       .filter((asset): asset is LayoutAsset => asset !== null)
-    return { version: 1, assets }
+    const builtinSeededVersion =
+      typeof parsed.builtinSeededVersion === 'number' ? parsed.builtinSeededVersion : undefined
+    return { version: 1, assets, ...(builtinSeededVersion !== undefined ? { builtinSeededVersion } : {}) }
   } catch {
     return { version: 1, assets: [] }
   }

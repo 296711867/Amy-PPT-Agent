@@ -32,7 +32,11 @@ import { prepareDeckImageAssets } from './deck-images'
 import { assignDeckBackgroundAssets, prepareDeckBackgroundAssets } from './deck-backgrounds'
 import { assignLayoutAssetsToOutline } from '@shared/layout-asset'
 import { blankMetricSlots, fillLayoutAsset } from '../layout-assets/fill'
-import { readLayoutManifest, readLayoutSkeleton } from '../layout-assets/library'
+import {
+  ensureLayoutLibrary,
+  readLayoutManifest,
+  readLayoutSkeleton
+} from '../layout-assets/library'
 import { diversifyUniversalLayoutSequence } from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
@@ -404,14 +408,16 @@ export async function executeDeckGeneration(
   // 锁定版式模式：整 deck 分配版式资产；配不上的页自动回退自由创作。
   const lockedAssignments =
     context.generationMode === 'locked'
-      ? await readLayoutManifest().then((manifest) =>
-          manifest.assets.length === 0
-            ? []
-            : assignLayoutAssetsToOutline(plannedOutline, manifest.assets, {
-                slideSizeId: context.slideSize.id,
-                seed: context.runId
-              })
-        )
+      ? await ensureLayoutLibrary()
+          .then(() => readLayoutManifest())
+          .then((manifest) =>
+            manifest.assets.length === 0
+              ? []
+              : assignLayoutAssetsToOutline(plannedOutline, manifest.assets, {
+                  slideSizeId: context.slideSize.id,
+                  seed: context.runId
+                })
+          )
       : []
   const lockedPageIds = new Set(
     pageRefs
