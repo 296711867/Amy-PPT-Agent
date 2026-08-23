@@ -39,14 +39,20 @@ export async function ensureLayoutLibrary(libraryRoot = resolveLayoutLibraryPath
     )
   }
   allowLocalAssetRoot(libraryRoot)
-  // 播种/升级内置基础版式（版本变化时重播后落盘）
-  const manifest = await readLayoutManifest(libraryRoot)
-  const result = await seedBuiltinLayoutAssets({
-    manifest,
-    libraryRoot,
-    skeletonDir: SKELETON_DIR
-  })
-  if (result.seeded > 0) await writeLayoutManifest(libraryRoot, manifest)
+  // 播种/升级内置基础版式；任何失败都不阻塞读取（列表仍可用已有 manifest）
+  try {
+    const manifest = await readLayoutManifest(libraryRoot)
+    const result = await seedBuiltinLayoutAssets({
+      manifest,
+      libraryRoot,
+      skeletonDir: SKELETON_DIR
+    })
+    if (result.seeded > 0) await writeLayoutManifest(libraryRoot, manifest)
+  } catch (error) {
+    log.warn('[layout-assets] builtin seeding failed; library stays read-only', {
+      message: error instanceof Error ? error.message : String(error)
+    })
+  }
 }
 
 export async function readLayoutManifest(
@@ -70,7 +76,8 @@ async function writeLayoutManifest(
   libraryRoot: string,
   manifest: LayoutAssetManifest
 ): Promise<void> {
-  await ensureLayoutLibrary(libraryRoot)
+  // 注意：这里绝不能回调 ensureLayoutLibrary —— ensure 播种后会写 manifest，
+  // 写 manifest 再 ensure 会形成无限递归（曾写满整个磁盘）。
   await fs.promises.writeFile(
     manifestPath(libraryRoot),
     JSON.stringify(manifest, null, 2),

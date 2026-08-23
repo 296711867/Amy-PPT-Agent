@@ -13,6 +13,7 @@ vi.mock('electron-log/main.js', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
+vi.mock('electron', () => ({ app: { getPath: () => process.cwd() } }))
 
 const builtinDir = path.join(process.cwd(), 'resources', 'layout-assets', 'builtin')
 
@@ -98,6 +99,27 @@ describe('seedBuiltinLayoutAssets', () => {
       })
       expect(second.seeded).toBe(0)
       expect(manifest.assets).toHaveLength(7)
+    } finally {
+      fs.rmSync(libraryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('ensureLayoutLibrary terminates and does not duplicate files on repeated calls', async () => {
+    const { ensureLayoutLibrary } = await import('../../../src/main/layout-assets/library')
+    const libraryRoot = fs.mkdtempSync(path.join(process.cwd(), 'tests', '.tmp-ensure-'))
+    try {
+      await ensureLayoutLibrary(libraryRoot)
+      const firstCount = fs
+        .readdirSync(path.join(libraryRoot, 'skeletons'))
+        .filter((name) => name.endsWith('.html')).length
+      // 第二次 ensure（幂等路径）：文件数不得增长（曾因 write→ensure 无限递归写满磁盘）
+      await ensureLayoutLibrary(libraryRoot)
+      await ensureLayoutLibrary(libraryRoot)
+      const finalCount = fs
+        .readdirSync(path.join(libraryRoot, 'skeletons'))
+        .filter((name) => name.endsWith('.html')).length
+      expect(firstCount).toBe(7)
+      expect(finalCount).toBe(7)
     } finally {
       fs.rmSync(libraryRoot, { recursive: true, force: true })
     }
