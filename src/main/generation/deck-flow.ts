@@ -15,7 +15,6 @@ import {
   runDeepAgentDeckGeneration
 } from './agent-runner'
 import type { GeneratedPagePayload } from '@shared/generation'
-import { sleep } from '../ipc/utils'
 import { customAlphabet, nanoid } from 'nanoid'
 import {
   buildOutlineTitles,
@@ -186,7 +185,6 @@ export async function executeDeckGeneration(
     page_id: context.messagePageId,
     run_model: context.runModel
   })
-  await sleep(120, context.abortSignal)
 
   const pageRefs = Array.from({ length: context.totalPages }, (_unused, index) => {
     const pageNumber = index + 1
@@ -299,8 +297,8 @@ export async function executeDeckGeneration(
       }
     })
   }
-  const designContractPromise = sleep(500, context.abortSignal).then(() =>
-    buildDesignContractWithLLM({
+  // 设计契约不再人为延迟：与规划并行，尽早解锁后续步骤。
+  const designContractPromise = buildDesignContractWithLLM({
       provider: context.provider,
       apiKey: context.apiKey,
       model: context.model,
@@ -326,7 +324,6 @@ export async function executeDeckGeneration(
       runId: context.runId,
       signal: context.abortSignal
     })
-  )
   const [plannedOutlineItems, designContract] = await Promise.all([
     plannerPromise,
     designContractPromise,
@@ -350,65 +347,65 @@ export async function executeDeckGeneration(
       }
     })
   )
-  const backgroundManifest = await prepareDeckBackgroundAssets({
-    db,
-    decryptApiKey: ctx.credentials.decryptApiKey,
-    projectDir: context.projectDir,
-    policy: context.deckBackgroundPolicy,
-    pageCount: plannedOutline.length,
-    slideSize: context.slideSize,
-    topic: context.topic,
-    stylePrompt: context.styleSkill.prompt,
-    provider: context.provider,
-    apiKey: context.apiKey,
-    model: context.model,
-    baseUrl: context.providerBaseUrl,
-    maxTokens: context.maxTokens,
-    modelControl: context.modelControl,
-    modelRuntime: context.modelRuntime,
-    signal: context.abortSignal,
-    onStatus: ({ state, current, total, role, whitespace, detail }) =>
-      emitDeckChunk({
-        type: 'llm_status',
-        payload: {
-          runId: context.runId,
-          stage: 'preflight',
-          label: uiText(context.appLocale, '生成 PPT 背景图', 'Generating PPT backgrounds'),
-          progress: 9,
-          totalPages: pageRefs.length,
-          detail:
-            state === 'planning'
-              ? uiText(
-                  context.appLocale,
-                  `正在根据主题和风格规划 ${total} 张背景图提示词`,
-                  `Planning prompts for ${total} theme-aware backgrounds`
-                )
-              : state === 'generating'
+  // 背景图生成与锁定版式分配并行：两者互不依赖，节省串行等待
+  const [backgroundManifest, lockedAssignments] = await Promise.all([
+    prepareDeckBackgroundAssets({
+      db,
+      decryptApiKey: ctx.credentials.decryptApiKey,
+      projectDir: context.projectDir,
+      policy: context.deckBackgroundPolicy,
+      pageCount: plannedOutline.length,
+      slideSize: context.slideSize,
+      topic: context.topic,
+      stylePrompt: context.styleSkill.prompt,
+      provider: context.provider,
+      apiKey: context.apiKey,
+      model: context.model,
+      baseUrl: context.providerBaseUrl,
+      maxTokens: context.maxTokens,
+      modelControl: context.modelControl,
+      modelRuntime: context.modelRuntime,
+      signal: context.abortSignal,
+      onStatus: ({ state, current, total, role, whitespace, detail }) =>
+        emitDeckChunk({
+          type: 'llm_status',
+          payload: {
+            runId: context.runId,
+            stage: 'preflight',
+            label: uiText(context.appLocale, '生成 PPT 背景图', 'Generating PPT backgrounds'),
+            progress: 9,
+            totalPages: pageRefs.length,
+            detail:
+              state === 'planning'
                 ? uiText(
                     context.appLocale,
-                    `正在生成第 ${current}/${total} 张背景图（${role || ''} · ${whitespace || ''}）`,
-                    `Generating background ${current}/${total} (${role || ''} · ${whitespace || ''})`
+                    `正在根据主题和风格规划 ${total} 张背景图提示词`,
+                    `Planning prompts for ${total} theme-aware backgrounds`
                   )
-                : state === 'failed'
-                  ? detail ||
-                    uiText(
+                : state === 'generating'
+                  ? uiText(
                       context.appLocale,
-                      '背景图生成失败，已跳过，演示生成将继续',
-                      'Background generation failed and was skipped; the deck will continue'
+                      `正在生成第 ${current}/${total} 张背景图（${role || ''} · ${whitespace || ''}）`,
+                      `Generating background ${current}/${total} (${role || ''} · ${whitespace || ''})`
                     )
-                  : uiText(
-                      context.appLocale,
-                      `第 ${current}/${total} 张背景图已完成`,
-                      `Background ${current}/${total} completed`
-                    )
-        }
-      })
-  })
-  const outlineWithBackgrounds = assignDeckBackgroundAssets(plannedOutline, backgroundManifest)
-  // 锁定版式模式：整 deck 分配版式资产；配不上的页自动回退自由创作。
-  const lockedAssignments =
+                  : state === 'failed'
+                    ? detail ||
+                      uiText(
+                        context.appLocale,
+                        '背景图生成失败，已跳过，演示生成将继续',
+                        'Background generation failed and was skipped; the deck will continue'
+                      )
+                    : uiText(
+                        context.appLocale,
+                        `第 ${current}/${total} 张背景图已完成`,
+                        `Background ${current}/${total} completed`
+                      )
+          }
+        })
+    }),
+    // 锁定版式模式：整 deck 分配版式资产；配不上的页自动回退自由创作。
     context.generationMode === 'locked'
-      ? await ensureLayoutLibrary()
+      ? ensureLayoutLibrary()
           .then(() => readLayoutManifest())
           .then((manifest) =>
             manifest.assets.length === 0
@@ -418,7 +415,9 @@ export async function executeDeckGeneration(
                   seed: context.runId
                 })
           )
-      : []
+      : Promise.resolve([])
+  ])
+  const outlineWithBackgrounds = assignDeckBackgroundAssets(plannedOutline, backgroundManifest)
   const lockedPageIds = new Set(
     pageRefs
       .filter((_page, index) => Boolean(lockedAssignments[index]))
@@ -542,8 +541,6 @@ export async function executeDeckGeneration(
       )
     }
   })
-
-  await sleep(120, context.abortSignal)
 
   const beforePageMap = new Map<string, string>()
   const beforePageResults = await Promise.all(
@@ -1186,8 +1183,9 @@ export async function executeDeckGeneration(
         )
   await emitAssistant(context, summary.trim() || fallbackCompletionSummary)
 
-  // 渲染级视觉自检：非阻塞的信息性评审（内部全量容错，任何失败只降级提示）。
-  await runVisualDeckReview({
+  // 渲染级视觉自检：信息性评审，移出关键路径 —— 完成状态先行，
+  // 审阅结果异步送达（内部全量容错，任何失败只降级提示）。
+  void runVisualDeckReview({
     sessionId: context.sessionId,
     runId: context.runId,
     slideSize: context.slideSize,
@@ -1212,6 +1210,11 @@ export async function executeDeckGeneration(
       (await db.getSetting<string>('visual_review').catch(() => null)) !== 'off',
     emit: (chunk) => emitDeckChunk(chunk),
     signal: context.abortSignal
+  }).catch((reviewError) => {
+    log.warn('[generate:deck] visual review failed (non-blocking)', {
+      sessionId: context.sessionId,
+      message: reviewError instanceof Error ? reviewError.message : String(reviewError)
+    })
   })
 
   await db.updateGenerationRunStatus(context.runId, 'completed', null)

@@ -418,15 +418,17 @@ describe('source-grounded prompt rules', () => {
     expect(sourceReadingSkill).toContain('Slide title: "Q3 Revenue Highlights"')
     expect(sourceReadingSkill).toContain('Prefer 50-80 lines around grep matches')
     expect(source).toContain('expansion must be source-grounded')
-    expect(source).toContain('SOURCE_GROUNDED_EXPANSION_RULES')
-    expect(source).toContain('if inspected material is thin, enrich the slide')
+    // Source rules live in the system prompt; the user prompt references them
+    // by name rather than re-including the full text (dedup).
+    expect(source).toContain('Follow the source-document strategy, fact rules')
+    expect(source).toContain('Follow the locate-then-read strategy')
     expect(readSource('src/main/agent-runtime/prompt/composers/deck-system.ts')).toContain(
       'SOURCE_GROUNDED_EXPANSION_RULES'
     )
     expect(readSource('src/main/agent-runtime/prompt/composers/edit-system.ts')).toContain(
       'SOURCE_GROUNDED_EXPANSION_RULES'
     )
-    expect(source).toContain('SOURCE_DOCUMENT_FACT_RULE')
+    expect(sharedSource).toContain('SOURCE_DOCUMENT_FACT_RULE')
     expect(sharedSource).toContain('examples, risks, decisions, or conclusions')
     expect(source).not.toContain('first use grep or glob')
     expect(source).not.toContain('you do not need to reread')

@@ -97,7 +97,8 @@ const editSystem = readProjectFile('src/main/agent-runtime/prompt/composers/edit
     expect(scenarioPrompt).toContain('收藏价值')
 
     expect(deckSystem).toContain('buildCanvasScenarioDeliveryGuard')
-    expect(generationUser).toContain('buildCanvasScenarioDeliveryGuard')
+    // Shared rules live in the system prompt only; user prompt is deduplicated.
+    expect(generationUser).not.toContain('buildCanvasScenarioDeliveryGuard')
 
     const containerEdit = editSystem.slice(
       editSystem.indexOf('function buildContainerEditPrompt('),

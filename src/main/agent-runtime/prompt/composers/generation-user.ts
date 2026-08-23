@@ -6,23 +6,10 @@ import {
   DIAGRAM_SKILL_NAME,
   formatSkillUsageRequirement
 } from '../../../product-skills/contract'
-import {
-  buildCanvasScenarioContentRules,
-  buildCanvasScenarioDeliveryGuard,
-  buildCanvasScenarioExpansionRules,
-  buildLayoutCollisionRules,
-  buildPageSemanticStructure,
-  buildCanvasConstraints,
-  CONTENT_LANGUAGE_RULES,
-  FRONTEND_CAPABILITIES,
-  SOURCE_DOCUMENT_FACT_RULE,
-  SOURCE_DOCUMENT_LOCATE_THEN_READ_RULE,
-  SOURCE_DOCUMENT_READ_STRATEGY,
-  SOURCE_GROUNDED_EXPANSION_RULES,
-  SOURCE_UNSUPPORTED_CLAIMS,
-  STABLE_HTML_FRAGMENT_PROTOCOL
-} from './shared'
-import { buildCanvasScenarioBrief, resolveCanvasScenario } from './canvas-scenario'
+// 共享规则段（画布约束、语言、语义结构、碰撞规则、HTML 协议、源文档策略等）
+// 已统一在 deck-system 系统提示注入，用户提示只带页面级数据。去重后每页省 ~5-7K tokens。
+import { SOURCE_UNSUPPORTED_CLAIMS } from './shared'
+import { resolveCanvasScenario } from './canvas-scenario'
 import { getUniversalLayoutImageAspect } from '@shared/universal-layouts'
 
 /** 规划期决定的视觉表达格式 → 页面生成指令（含技能路由）。 */
@@ -144,9 +131,7 @@ export function buildSinglePageGenerationPrompt(args: {
             'Source document requirements:',
             '- This slide already has program-side retrieved snippets.',
             `- Source document paths: ${args.sourceDocumentPaths.join(', ')}`,
-            SOURCE_DOCUMENT_READ_STRATEGY,
-            SOURCE_DOCUMENT_FACT_RULE,
-            SOURCE_GROUNDED_EXPANSION_RULES,
+            '- Follow the source-document strategy, fact rules, and grounded expansion rules from the system prompt.',
             args.isRetryMode
               ? '- This is a failed-slide retry. Match source material only around this slide title and content points; do not reconstruct the whole deck outline.'
               : ''
@@ -156,11 +141,9 @@ export function buildSinglePageGenerationPrompt(args: {
             'Source document requirements:',
             `- Source document paths: ${args.sourceDocumentPaths.join(', ')}`,
             '- No retrieved snippets matched this slide.',
-            SOURCE_DOCUMENT_LOCATE_THEN_READ_RULE,
+            '- Follow the locate-then-read strategy and source fact rules from the system prompt.',
             '- First extract keywords, business objects, time points, system names, and metrics from this slide title and content points; then match relevant source passages.',
             '- Do not copy the whole document indiscriminately.',
-            SOURCE_DOCUMENT_FACT_RULE,
-            SOURCE_GROUNDED_EXPANSION_RULES,
             args.isRetryMode
               ? '- This is a failed-slide retry. Match source material only around this slide title and content points; do not reconstruct the whole deck outline.'
               : ''
@@ -199,10 +182,6 @@ export function buildSinglePageGenerationPrompt(args: {
     : []
   return [
     `Generate and write only this ${canvasScenario.pageName}. Do not modify other pages.`,
-    '',
-    buildCanvasScenarioBrief(args.slideSize),
-    '',
-    buildCanvasScenarioContentRules(args.slideSize),
     '',
     `Topic: ${args.topic}`,
     `Deck title: ${args.deckTitle}`,
@@ -283,32 +262,21 @@ export function buildSinglePageGenerationPrompt(args: {
     ...sourceDocumentInstructions,
     ...sourceRangeInstructions,
     '',
-    CONTENT_LANGUAGE_RULES,
-    '',
-    buildPageSemanticStructure(args.slideSize),
-    '',
-    buildCanvasConstraints(args.slideSize),
-    '',
-    buildLayoutCollisionRules(args.slideSize),
-    '',
-    buildCanvasScenarioDeliveryGuard(args.slideSize),
-    '',
-    FRONTEND_CAPABILITIES,
-    '',
-    STABLE_HTML_FRAGMENT_PROTOCOL,
+    // 共享规则段（画布、语言、语义结构、约束、碰撞、交付、前端能力、HTML 协议、扩展）
+    // 全部在 deck-system 系统提示中一次性注入，用户提示只带页面级数据。
+    // 去重后每页 prompt 减少 ~5-7K tokens，且因为系统提示跨页稳定，
+    // 同一 deck 内的 provider 端 prompt cache 可命中。
     ...retryInstructions,
     '',
-    buildCanvasScenarioExpansionRules(args.slideSize),
-    '',
     'Required content enrichment decision before writing:',
-    '- First use the Canvas scenario rules to decide the page form and focal message; then use the scenario expansion rules only to decide whether the content itself needs enrichment or optimization.',
+    '- First use the Canvas scenario rules (in the system prompt) to decide the page form and focal message; then use the scenario expansion rules (also in the system prompt) only to decide whether the content itself needs enrichment or optimization.',
     '- If the content points are only a title, one short sentence, or 1-2 seed phrases, the page is thin: enrich the warranted structure before writing the final content.',
     '- If the content points already contain enough facts, the page is not thin: group and compress instead of adding more visible modules.',
     '- This content decision happens before animation and final HTML; animation is downstream only and must follow the current canvas scenario, source grounding, and warranted content enrichment.',
     '',
     'Expansion selection guardrails:',
     '- Treat content points as short seed phrases, not as a checklist that must become one visible card/row per point. Decide which points are primary, grouped support, compact annotations, or lower-priority detail based on the slide title, source range, and available space.',
-    '- When source documents are present, expansion must be source-grounded through SOURCE_GROUNDED_EXPANSION_RULES: if inspected material is thin, enrich the slide from inspected material; if it is dense, summarize and group.',
+    '- When source documents are present, expansion must be source-grounded: if inspected material is thin, enrich the slide from inspected material; if it is dense, summarize and group.',
     `- Do not add generic industry framing, unsupported ${SOURCE_UNSUPPORTED_CLAIMS}, or polished-sounding conclusions that are absent from the source document.`,
     '- Do not duplicate the same source facts in multiple large modules. If a fact appears in a timeline/table/chart, do not repeat it again as a separate summary card unless it is the single hero message of the slide.',
     '- When there are many same-level points, preserve the main meaning by grouping related points and surfacing only the amount that fits a real slide with breathing room.',

@@ -124,14 +124,14 @@ describe('content expansion rules — always-on, not source-gated', () => {
     expect(expansionBlock).toContain('偏薄')
   })
 
-  it('is imported by the real deck-agent entry and single-page generation', () => {
+  it('is imported by the real deck-agent system prompt (deduplicated from user prompt)', () => {
     const deckSystem = readSource('src/main/agent-runtime/prompt/composers/deck-system.ts')
     const generationUser = readSource('src/main/agent-runtime/prompt/composers/generation-user.ts')
 
     // The deck path runs through buildDeckAgentSystemPrompt (called in agent.ts).
-    // Wire the rule where it actually ships.
+    // Shared rules live ONLY in the system prompt; the user prompt carries page data.
     expect(deckSystem).toContain('buildCanvasScenarioExpansionRules')
-    expect(generationUser).toContain('buildCanvasScenarioExpansionRules')
+    expect(generationUser).not.toContain('buildCanvasScenarioExpansionRules')
   })
 
   it('the dead deck helper is gone (deck runs through buildDeckAgentSystemPrompt, not a never-called helper)', () => {
@@ -155,16 +155,17 @@ describe('content expansion rules — always-on, not source-gated', () => {
     )
   })
 
-  it('single-page generation wires it into the always-on return, not the source-gated block', () => {
+  it('single-page generation references system-prompt rules without duplicating them', () => {
     const generationUser = readSource('src/main/agent-runtime/prompt/composers/generation-user.ts')
     const singlePageSource = generationUser.slice(
       generationUser.indexOf('export function buildSinglePageGenerationPrompt')
     )
 
-    // Present in the main return array (after retryInstructions), not inside the
-    // sourceDocumentInstructions ternary that only fires with source documents.
-    const afterRetry = singlePageSource.slice(singlePageSource.indexOf('...retryInstructions'))
-    expect(afterRetry).toContain('buildCanvasScenarioExpansionRules(args.slideSize)')
+    // The enrichment decision remains in the user prompt (it references system
+    // prompt rules by name), but the verbatim rule builder call is gone.
+    expect(singlePageSource).toContain('Required content enrichment decision before writing')
+    expect(singlePageSource).toContain('from the system prompt')
+    expect(singlePageSource).not.toContain('buildCanvasScenarioExpansionRules(args.slideSize)')
   })
 
   it('generation prompts keep page form in scenario rules and content enrichment in scenario expansion rules', () => {
@@ -183,15 +184,11 @@ describe('content expansion rules — always-on, not source-gated', () => {
     })
 
     expect(pagePrompt).toContain('Required content enrichment decision before writing')
-    expect(pagePrompt).toContain('First use the Canvas scenario rules to decide the page form')
-    expect(pagePrompt).toContain(
-      'scenario expansion rules only to decide whether the content itself needs enrichment'
-    )
+    expect(pagePrompt).toContain('Canvas scenario rules (in the system prompt)')
+    expect(pagePrompt).toContain('scenario expansion rules (also in the system prompt)')
     expect(pagePrompt).toContain('the page is thin: enrich the warranted structure')
     expect(pagePrompt).toContain('animation is downstream only')
-    expect(pagePrompt).toContain(
-      'must follow the current canvas scenario, source grounding, and warranted content enrichment'
-    )
+    expect(pagePrompt).toContain('warranted content enrichment')
 
     expect(deckPrompt).toContain('Animation preferences for page writing only')
     expect(deckPrompt).toContain('Animation is downstream only')
@@ -264,8 +261,9 @@ describe('content expansion rules — always-on, not source-gated', () => {
     expect(scenario).toContain('构图平衡')
 
     // Both real generation entries import and foreground it (DRY — one source).
+    // The system prompt is the single home; the user prompt no longer duplicates.
     expect(deckSystem).toContain('buildCanvasScenarioContentRules')
-    expect(generationUser).toContain('buildCanvasScenarioContentRules')
+    expect(generationUser).not.toContain('buildCanvasScenarioContentRules')
 
     // Form guidance and source-grounded content enrichment live ONLY in the
     // rewrite-capable edit paths (single-page + deck). Selector (element-level)
