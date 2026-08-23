@@ -161,7 +161,7 @@ const friendlyProgressLabel = (label: string | undefined, detail: string, lang: 
 }
 
 const friendlyFailureProgressDetail = (lang: Lang, rawDetail = ''): string => {
-  // 服务端瞬态错误优先展示真实原因，避免误报"结构检查未通过"
+  // 服务端瞬态错误优先展示真实原因
   if (/\b(?:503|502)\b|service\s+(?:temporarily\s+)?unavailable|overloaded/i.test(rawDetail)) {
     return friendlyText(
       lang,
@@ -176,11 +176,19 @@ const friendlyFailureProgressDetail = (lang: Lang, rawDetail = ''): string => {
       'The model service is rate limiting; retrying automatically.'
     )
   }
-  return friendlyText(
-    lang,
-    '页面结构检查未通过，正在尝试修复。',
-    'The page structure needs a fix; trying to repair it.'
-  )
+  if (/页面结构|structure|html.*校验|未闭合|placeholder/i.test(rawDetail)) {
+    return friendlyText(
+      lang,
+      '页面结构检查未通过，正在尝试修复。',
+      'The page structure needs a fix; trying to repair it.'
+    )
+  }
+  // 其他失败：展示原始错误摘要，不谎报为结构问题
+  const summary = compactWhitespace(rawDetail).slice(0, 120)
+  if (summary) {
+    return summary
+  }
+  return friendlyText(lang, '生成遇到问题，正在处理。', 'Generation hit an issue; working on it.')
 }
 
 const friendlyFailureMessage = (message: string | null | undefined, lang: Lang): string => {
