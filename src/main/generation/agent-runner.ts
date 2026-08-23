@@ -1429,6 +1429,17 @@ export const runDeepAgentDeckGeneration = async (args: {
               content: [
                 args.singlePagePromptAddendum?.trim() || '',
                 pagePromptAddendum?.trim() || '',
+                retryContext
+                  ? [
+                      '',
+                      'Targeted repair instructions (this is a retry):',
+                      '1. First read the existing page HTML with read_file to see what is already written.',
+                      '2. Identify the specific violation from the previous error and fix ONLY that issue.',
+                      '3. Preserve all content, facts, and layout elements that were correct in the previous version.',
+                      '4. Do not rewrite the entire page from scratch — make surgical fixes to the failing elements.',
+                      `5. Previous error: ${retryContext.previousError}`
+                    ].join('\n')
+                  : '',
                 args.requireTemplatePageRead
                   ? [
                       'Template inspection is mandatory before writing.',
@@ -1999,7 +2010,9 @@ export const runDeepAgentDeckGeneration = async (args: {
           [
             'You are performing one bounded deck-level quality repair.',
             "Keep this slide's narrative job, facts, and intended layout. Do not redesign unrelated content.",
-            'Read the exact findings below, then rewrite only this page through the required controlled page tool.',
+            'IMPORTANT: First read the existing page HTML with read_file, then make ONLY the targeted fixes listed below.',
+            'Preserve all content, facts, and layout elements that were correct in the previous version.',
+            'Do not rewrite the entire page from scratch — fix only the failing elements.',
             feedback
           ].join('\n')
         )
@@ -2167,7 +2180,8 @@ export const runDeepAgentDeckGeneration = async (args: {
             [
               'You are performing one bounded narrative repair on this slide.',
               "Preserve verified facts, the slide's visual system, and its intended role.",
-              'Fix only the assigned audience-facing narrative defects and write the page through the controlled page tool.',
+              'IMPORTANT: First read the existing page HTML with read_file, then fix only the narrative defects listed below.',
+              'Do not rewrite the entire page from scratch — preserve all correct content and make surgical fixes.',
               feedback
             ].join('\n')
           )
