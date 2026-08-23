@@ -160,12 +160,28 @@ const friendlyProgressLabel = (label: string | undefined, detail: string, lang: 
   return compactLabel
 }
 
-const friendlyFailureProgressDetail = (lang: Lang): string =>
-  friendlyText(
+const friendlyFailureProgressDetail = (lang: Lang, rawDetail = ''): string => {
+  // 服务端瞬态错误优先展示真实原因，避免误报"结构检查未通过"
+  if (/\b(?:503|502)\b|service\s+(?:temporarily\s+)?unavailable|overloaded/i.test(rawDetail)) {
+    return friendlyText(
+      lang,
+      '模型服务临时不可用，正在退避等待后自动重试。',
+      'The model service is temporarily unavailable; retrying with backoff.'
+    )
+  }
+  if (/\b429\b|rate.?limit|quota/i.test(rawDetail)) {
+    return friendlyText(
+      lang,
+      '模型服务限流，正在等待后自动重试。',
+      'The model service is rate limiting; retrying automatically.'
+    )
+  }
+  return friendlyText(
     lang,
     '页面结构检查未通过，正在尝试修复。',
     'The page structure needs a fix; trying to repair it.'
   )
+}
 
 const friendlyFailureMessage = (message: string | null | undefined, lang: Lang): string => {
   const compact = compactWhitespace(message || '')
@@ -528,7 +544,7 @@ export function SessionGeneratingPage({
         const detail = event.payload.detail || ''
         const failureProgress = isFailureProgress(event.payload.label, detail)
         const friendlyDetail = failureProgress
-          ? friendlyFailureProgressDetail(lang)
+          ? friendlyFailureProgressDetail(lang, detail)
           : friendlyProgressDetail(detail, lang)
         const pageMatch = detail.match(/(\d+)\/(\d+)\s*(页|pages?)/)
 

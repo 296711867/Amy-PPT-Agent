@@ -70,6 +70,25 @@ describe('classifyGenerationError', () => {
     })
   })
 
+  it('classifies 503/502 service unavailable as rate-limit-class transient failures', () => {
+    for (const message of [
+      '503 Service temporarily unavailable',
+      '502 Bad Gateway',
+      'The service is overloaded'
+    ]) {
+      const failure = classifyGenerationError(new Error(message))
+      expect(failure, message).toMatchObject({
+        code: 'MODEL_RATE_LIMIT',
+        scope: 'system',
+        action: 'pause-run',
+        retryable: true
+      })
+    }
+    expect(classifyGenerationError(new Error('503 Service temporarily unavailable')).titleZh).toBe(
+      '模型服务暂不可用'
+    )
+  })
+
   it('keeps HTML validation failures scoped to one page', () => {
     expect(classifyGenerationError(new Error('HTML 落盘校验失败：存在未闭合标签'))).toMatchObject({
       code: 'PAGE_WRITE',

@@ -4,6 +4,7 @@ export type GenerationFailureCode =
   | 'MODEL_QUOTA'
   | 'MODEL_RATE_LIMIT'
   | 'MODEL_TIMEOUT'
+  | 'MODEL_TIMEOUT'
   | 'MODEL_CONNECTION'
   | 'PAGE_VALIDATION'
   | 'PAGE_WRITE'
@@ -80,6 +81,16 @@ export function classifyGenerationError(error: unknown): GenerationFailureInfo {
     retryable = false
     titleZh = '模型额度不足'
     detailZh = '模型账户余额不足或配额已用尽，已停止生成。请充值或更换有额度的模型后重试。'
+  } else if (
+    /\b503\b|\b502\b|service\s+(?:temporarily\s+)?unavailable|bad\s+gateway|overloaded/i.test(
+      normalized
+    )
+  ) {
+    code = 'MODEL_RATE_LIMIT'
+    scope = 'system'
+    action = 'pause-run'
+    titleZh = '模型服务暂不可用'
+    detailZh = '模型服务临时不可用（503/502），已在退避重试。若持续失败，请检查模型端点是否在线。'
   } else if (/\b429\b|rate.?limit|too many requests|quota/i.test(normalized)) {
     code = 'MODEL_RATE_LIMIT'
     scope = 'system'
