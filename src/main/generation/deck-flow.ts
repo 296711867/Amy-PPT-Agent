@@ -36,6 +36,7 @@ import {
   readLayoutManifest,
   readLayoutSkeleton
 } from '../layout-assets/library'
+import { createWorkflowTelemetry } from './workflow-telemetry'
 import { diversifyUniversalLayoutSequence } from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
@@ -161,6 +162,9 @@ export async function executeDeckGeneration(
     throw new Error(`当前 provider "${context.provider}" 缺少 API Key，请先到设置页配置。`)
   }
 
+  // 工作流遥测：按阶段记录耗时和重试，写入 generation_run metadata
+  const telemetry = createWorkflowTelemetry()
+
   const emitDeckChunk = createDeckProgressEmitter(context.sessionId, context.appLocale)
 
   emitDeckChunk({
@@ -246,15 +250,18 @@ export async function executeDeckGeneration(
       }
     })
   })
+  const tScaffold = telemetry.begin('page-scaffold', { pages: pageRefs.length })
+  scaffoldPromise.then(() => tScaffold.finish(true), () => tScaffold.finish(false))
 
   const shouldUseSourcePlan = canUseSourcePlanDirectly({
     sourcePlan: context.sourcePlan,
     totalPages: pageRefs.length,
     userMessage: context.userMessage
   })
-  const plannerPromise =
+  const tPlanning = telemetry.begin('planning', { sourcePlan: shouldUseSourcePlan })
+  const plannerPromise = Promise.resolve(
     shouldUseSourcePlan && context.sourcePlan
-      ? Promise.resolve(mapSourcePlanToOutlineItems(context.sourcePlan))
+      ? mapSourcePlanToOutlineItems(context.sourcePlan)
       : planDeckWithLLM({
           provider: context.provider,
           apiKey: context.apiKey,
@@ -275,6 +282,16 @@ export async function executeDeckGeneration(
           runId: context.runId,
           signal: context.abortSignal
         })
+  ).then(
+    (result) => {
+      tPlanning.finish(true, { pages: result.length })
+      return result
+    },
+    (error) => {
+      tPlanning.finish(false)
+      throw error
+    }
+  )
   if (shouldUseSourcePlan) {
     log.info('[generate:deck] using source page skeleton as outline plan', {
       sessionId: context.sessionId,
@@ -298,6 +315,7 @@ export async function executeDeckGeneration(
     })
   }
   // 设计契约不再人为延迟：与规划并行，尽早解锁后续步骤。
+  const tDesign = telemetry.begin('design-contract')
   const designContractPromise = buildDesignContractWithLLM({
       provider: context.provider,
       apiKey: context.apiKey,
@@ -323,7 +341,16 @@ export async function executeDeckGeneration(
       emit: (chunk) => emitDeckChunk(chunk),
       runId: context.runId,
       signal: context.abortSignal
-    })
+    }).then(
+      (result) => {
+        tDesign.finish(true)
+        return result
+      },
+      (error) => {
+        tDesign.finish(false)
+        throw error
+      }
+    )
   const [plannedOutlineItems, designContract] = await Promise.all([
     plannerPromise,
     designContractPromise,
@@ -348,6 +375,12 @@ export async function executeDeckGeneration(
     })
   )
   // 背景图生成与锁定版式分配并行：两者互不依赖，节省串行等待
+  const tBackgrounds = telemetry.begin('backgrounds', {
+    enabled: context.deckBackgroundPolicy.enabled
+  })
+  const tLocked = telemetry.begin('locked-layouts', {
+    mode: context.generationMode
+  })
   const [backgroundManifest, lockedAssignments] = await Promise.all([
     prepareDeckBackgroundAssets({
       db,
@@ -417,6 +450,8 @@ export async function executeDeckGeneration(
           )
       : Promise.resolve([])
   ])
+  tBackgrounds.finish(true, { manifestAssets: backgroundManifest?.assets.length || 0 })
+  tLocked.finish(true, { lockedPages: lockedAssignments.filter(Boolean).length })
   const outlineWithBackgrounds = assignDeckBackgroundAssets(plannedOutline, backgroundManifest)
   const lockedPageIds = new Set(
     pageRefs
@@ -430,6 +465,7 @@ export async function executeDeckGeneration(
       totalPages: pageRefs.length
     })
   }
+  const tImages = telemetry.begin('page-images', { policy: context.imagePolicy })
   const outlineItems = await prepareDeckImageAssets({
     db,
     decryptApiKey: ctx.credentials.decryptApiKey,
@@ -471,6 +507,7 @@ export async function executeDeckGeneration(
         }
       })
   })
+  tImages.finish(true)
   const outlineTitles = outlineItems.map((item) => item.title)
   const retiredPageCount = await retireActiveSessionPagesForReplacement(db, context.sessionId)
   if (retiredPageCount > 0) {
@@ -746,6 +783,11 @@ export async function executeDeckGeneration(
     pendingPages: Array<{ pageId: string; title: string }>
     pause: Awaited<ReturnType<typeof runDeepAgentDeckGeneration>>['pause']
   } = { summary: '', failedPages: [], pendingPages: [], pause: null }
+  const tPages = telemetry.begin('page-generation', {
+    totalPages: pageRefs.length,
+    lockedPages: lockedPageIds.size,
+    llmPages: llmPageRefs.length
+  })
   if (llmPageRefs.length > 0) {
     agentOutcome = await runDeepAgentDeckGeneration({
     sessionId: context.sessionId,
@@ -806,6 +848,10 @@ export async function executeDeckGeneration(
     })
   }
   const { summary: agentSummary, failedPages, pendingPages, pause } = agentOutcome
+  tPages.finish(failedPages.length === 0, {
+    failedPages: failedPages.length,
+    completedPages: pageRefs.length - failedPages.length
+  })
   const lockedSummary =
     lockedPageIds.size > 0
       ? uiText(
@@ -1217,7 +1263,13 @@ export async function executeDeckGeneration(
     })
   })
 
+  // 遥测落盘 + 日志汇总
+  telemetry.logSummary()
+  const telemetryMetadata = telemetry.toMetadata()
   await db.updateGenerationRunStatus(context.runId, 'completed', null)
+  await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
+    lastRunTelemetry: telemetryMetadata
+  }))
   await finalizeGenerationSuccess(ctx, {
     context,
     indexPath,
