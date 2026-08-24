@@ -11,6 +11,7 @@ export type WorkflowStageName =
   | 'backgrounds'
   | 'locked-layouts'
   | 'page-images'
+  | 'preflight-spec'
   | 'page-scaffold'
   | 'page-generation'
   | 'deck-quality-review'

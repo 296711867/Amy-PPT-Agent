@@ -38,6 +38,7 @@ import {
 } from '../layout-assets/library'
 import { createWorkflowTelemetry } from './workflow-telemetry'
 import { validateAssetIntegrity } from './asset-integrity'
+import { preflightSpecCheck } from './preflight-spec'
 import { diversifyUniversalLayoutSequence } from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
@@ -467,7 +468,7 @@ export async function executeDeckGeneration(
     })
   }
   const tImages = telemetry.begin('page-images', { policy: context.imagePolicy })
-  const outlineItems = await prepareDeckImageAssets({
+  const rawOutlineItems = await prepareDeckImageAssets({
     db,
     decryptApiKey: ctx.credentials.decryptApiKey,
     projectDir: context.projectDir,
@@ -509,6 +510,13 @@ export async function executeDeckGeneration(
       })
   })
   tImages.finish(true)
+  // 前置规格拦截：把内容校准到版式容量内，避免生成后校验失败重试
+  const tPreflight = telemetry.begin('preflight-spec')
+  const preflightResult = preflightSpecCheck(rawOutlineItems, {
+    projectDir: context.projectDir
+  })
+  const outlineItems = preflightResult.items
+  tPreflight.finish(true, { adjustments: preflightResult.adjustments.length })
   const outlineTitles = outlineItems.map((item) => item.title)
   const retiredPageCount = await retireActiveSessionPagesForReplacement(db, context.sessionId)
   if (retiredPageCount > 0) {
