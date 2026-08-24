@@ -183,7 +183,10 @@ export const IPC_INVOKE_CHANNELS = [
   'layoutAssets:importFromSession',
   'layoutAssets:delete',
   'pages:getLayoutControls',
-  'pages:adjustModuleCount'
+  'pages:adjustModuleCount',
+  'pages:switchPalette',
+  'pages:reorderFocus',
+  'pages:switchLayout'
 ] as const
 
 export const IPC_EVENT_CHANNELS = [

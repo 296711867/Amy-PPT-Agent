@@ -1097,11 +1097,33 @@ export const ipc = {
       moduleRange: { min: number; max: number } | null
       currentModuleCount: number
       canAdjust: boolean
+      currentPalette: string
+      palettes: Array<{ id: string; label: string }>
+      listItems: string[]
+      alternativeLayouts: Array<{ id: string; title: string; roles: string[] }>
     } | null>,
   adjustModuleCount: (sessionId: string, pageId: string, moduleCount: number) =>
     getIpc().invoke('pages:adjustModuleCount', { sessionId, pageId, moduleCount }) as Promise<{
       success: boolean
       moduleCount: number
+      htmlPath: string
+    }>,
+  switchPalette: (sessionId: string, pageId: string, palette: string) =>
+    getIpc().invoke('pages:switchPalette', { sessionId, pageId, palette }) as Promise<{
+      success: boolean
+      palette: string
+      htmlPath: string
+    }>,
+  reorderFocus: (sessionId: string, pageId: string, focusIndex: number) =>
+    getIpc().invoke('pages:reorderFocus', { sessionId, pageId, focusIndex }) as Promise<{
+      success: boolean
+      focusIndex: number
+      htmlPath: string
+    }>,
+  switchLayout: (sessionId: string, pageId: string, layoutAssetId: string) =>
+    getIpc().invoke('pages:switchLayout', { sessionId, pageId, layoutAssetId }) as Promise<{
+      success: boolean
+      layoutAssetId: string
       htmlPath: string
     }>,
   chooseAndUploadAssets: (sessionId: string, assetType: 'image' | 'video' = 'image') =>
