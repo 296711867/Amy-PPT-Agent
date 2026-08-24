@@ -724,6 +724,11 @@ export async function executeDeckGeneration(
   // 锁定版式页：读骨架 → 确定性填充 → 落盘并按完成页记录（不经过 LLM）。
   // 单页填充失败自动降级为自由创作页。
   const skeletonCache = new Map<string, string>()
+  const lockedPageBindings = new Map<string, {
+    layoutAssetId: string
+    contentPackage: { title: string; body: string; listItems: string[]; metrics?: string[] }
+    moduleRange?: { min: number; max: number }
+  }>()
   for (let index = 0; index < pageRefs.length; index += 1) {
     const assigned = lockedAssignments[index]
     const page = pageRefs[index]
@@ -757,6 +762,19 @@ export async function executeDeckGeneration(
       })
       filled = blankMetricSlots(assigned, filled)
       await fs.promises.writeFile(page.htmlPath, filled, 'utf-8')
+      // 记录版式绑定：后续控件面板可免 AI 重渲染
+      lockedPageBindings.set(page.pageId, {
+        layoutAssetId: assigned.id,
+        contentPackage: {
+          title: outline.title,
+          body,
+          listItems,
+          ...(metricValues.length > 0 ? { metrics: metricValues } : {})
+        },
+        moduleRange: listSlot
+          ? { min: (assigned.slots.find((s) => s.kind === 'list') as { minItems: number }).minItems, max: listSlot.maxItems }
+          : undefined
+      })
       await persistCompletedGeneratedPage({
         pageNumber: page.pageNumber,
         pageId: page.pageId,
@@ -1315,9 +1333,12 @@ export async function executeDeckGeneration(
   // 遥测落盘 + 日志汇总
   telemetry.logSummary()
   const telemetryMetadata = telemetry.toMetadata()
+  // 版式绑定持久化：控件面板免 AI 重渲染的数据源
+  const pageLayoutBindings = Object.fromEntries(lockedPageBindings.entries())
   await db.updateGenerationRunStatus(context.runId, 'completed', null)
   await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
     lastRunTelemetry: telemetryMetadata,
+    ...(Object.keys(pageLayoutBindings).length > 0 ? { pageLayoutBindings } : {}),
     ...(integrityReport.violations.length > 0
       ? { lastAssetWarnings: integrityReport.violations.slice(0, 20) }
       : {})

@@ -12,6 +12,7 @@ import { StyleView } from '../components/session-detail/style/StyleView'
 import { StyleSwitchJobBar } from '../components/session-detail/style/StyleSwitchJobBar'
 import { ElementInspectorPanel } from '../components/session-detail/element-inspector'
 import { SessionDetailRightPanel, WorkspaceRibbon } from '../components/session-detail/workspace'
+import { LayoutControlPanel } from '../components/session-detail/workspace/LayoutControlPanel'
 import { SessionToolbar } from '../components/session-detail/toolbar'
 import {
   AddBlankPageDialog,
@@ -1847,6 +1848,11 @@ export function SessionDetailPage(): React.JSX.Element {
                     ) : undefined
                   }
                 />
+                {selectedPage?.pageId ? (
+                  <div className="w-64 shrink-0">
+                    <LayoutControlPanel sessionId={id} pageId={selectedPage.pageId} />
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

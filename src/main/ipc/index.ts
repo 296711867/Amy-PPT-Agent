@@ -41,6 +41,7 @@ import { registerPageBeautifyJobHandlers } from '../edit-jobs/page-beautify-job-
 import { registerStyleSwitchJobHandlers } from '../edit-jobs/style-switch-job-service'
 import { registerMasterHandlers } from '../session/master-handlers'
 import { registerLayoutAssetHandlers } from '../layout-assets/handlers'
+import { registerLayoutControlHandlers } from '../generation/layout-controls'
 
 export { registerLocalAssetProtocol }
 
@@ -114,6 +115,7 @@ export function setupIPC(
   registerDocumentParseHandlers(context)
   registerPptxImportHandlers(context)
   registerLayoutAssetHandlers(context)
+  registerLayoutControlHandlers(context)
   registerHistoryHandlers(context)
   registerPresentationHandlers(context)
   registerSpeechHandlers(context)

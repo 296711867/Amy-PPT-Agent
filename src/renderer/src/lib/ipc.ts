@@ -1091,6 +1091,19 @@ export const ipc = {
     }>,
   layoutAssetsDelete: (id: string) =>
     getIpc().invoke('layoutAssets:delete', { id }) as Promise<{ success: boolean }>,
+  getLayoutControls: (sessionId: string, pageId: string) =>
+    getIpc().invoke('pages:getLayoutControls', { sessionId, pageId }) as Promise<{
+      layoutAssetId: string
+      moduleRange: { min: number; max: number } | null
+      currentModuleCount: number
+      canAdjust: boolean
+    } | null>,
+  adjustModuleCount: (sessionId: string, pageId: string, moduleCount: number) =>
+    getIpc().invoke('pages:adjustModuleCount', { sessionId, pageId, moduleCount }) as Promise<{
+      success: boolean
+      moduleCount: number
+      htmlPath: string
+    }>,
   chooseAndUploadAssets: (sessionId: string, assetType: 'image' | 'video' = 'image') =>
     getIpc().invoke('assets:chooseAndUpload', { sessionId, assetType }) as Promise<{
       assets: UploadedAsset[]
