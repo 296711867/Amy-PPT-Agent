@@ -37,6 +37,7 @@ import {
   readLayoutSkeleton
 } from '../layout-assets/library'
 import { createWorkflowTelemetry } from './workflow-telemetry'
+import { validateAssetIntegrity } from './asset-integrity'
 import { diversifyUniversalLayoutSequence } from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
@@ -1263,12 +1264,47 @@ export async function executeDeckGeneration(
     })
   })
 
+  // 资产完整性校验：扫描本地资源引用，缺失记录为警告（不阻塞交付）
+  const tIntegrity = telemetry.begin('asset-integrity')
+  const integrityReport = validateAssetIntegrity(
+    pageDescriptors.map((page) => ({
+      pageId: page.pageId,
+      pageNumber: page.pageNumber,
+      htmlPath: page.htmlPath
+    }))
+  )
+  tIntegrity.finish(true, {
+    checkedPages: integrityReport.checkedPages,
+    totalRefs: integrityReport.totalReferences,
+    violations: integrityReport.violations.length
+  })
+  if (integrityReport.violations.length > 0) {
+    emitDeckChunk({
+      type: 'llm_status',
+      payload: {
+        runId: context.runId,
+        stage: 'rendering',
+        label: progressText(context.appLocale, 'completed'),
+        progress: 100,
+        totalPages: pageRefs.length,
+        detail: uiText(
+          context.appLocale,
+          `注意：${integrityReport.violations.length} 个本地资源引用缺失（如图片路径不存在），页面上可能显示裂图。`,
+          `Warning: ${integrityReport.violations.length} local asset references are missing; broken images may appear.`
+        )
+      }
+    })
+  }
+
   // 遥测落盘 + 日志汇总
   telemetry.logSummary()
   const telemetryMetadata = telemetry.toMetadata()
   await db.updateGenerationRunStatus(context.runId, 'completed', null)
   await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
-    lastRunTelemetry: telemetryMetadata
+    lastRunTelemetry: telemetryMetadata,
+    ...(integrityReport.violations.length > 0
+      ? { lastAssetWarnings: integrityReport.violations.slice(0, 20) }
+      : {})
   }))
   await finalizeGenerationSuccess(ctx, {
     context,

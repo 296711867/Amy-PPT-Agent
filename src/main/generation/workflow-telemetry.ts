@@ -16,6 +16,7 @@ export type WorkflowStageName =
   | 'deck-quality-review'
   | 'narrative-review'
   | 'visual-review'
+  | 'asset-integrity'
   | 'finalization'
 
 export type StageAttempt = {
