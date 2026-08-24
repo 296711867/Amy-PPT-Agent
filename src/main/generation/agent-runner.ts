@@ -54,7 +54,11 @@ import {
   formatReferenceDocumentSnippets
 } from './reference-document-retrieval'
 import { logAgentToolEvents } from '../utils/agent-tool-logger'
-import { normalizeAudienceMove, normalizeKeyPoints, normalizeOutlineText } from './outline-normalizer'
+import {
+  normalizeAudienceMove,
+  normalizeOutlineEntries,
+  normalizeOutlineText
+} from './outline-normalizer'
 import { classifyPageMethodSignal } from './method-signals'
 import {
   MAX_RATE_LIMIT_RETRIES,
@@ -419,7 +423,8 @@ export const planDeckWithLLM = async (args: {
     }
     const items: OutlineItem[] = (parsed as Array<Record<string, unknown>>).map((item, index) => {
       const title = String(item.title ?? '').trim()
-      const keyPoints = normalizeKeyPoints(item.keyPoints)
+      const structuredEntries = normalizeOutlineEntries(item.keyPoints)
+      const keyPoints = structuredEntries.map((entry) => entry.label)
       const requestedModuleCount = Number(item.moduleCount)
       const moduleCount = Number.isFinite(requestedModuleCount)
         ? Math.max(1, Math.min(6, Math.floor(requestedModuleCount)))
@@ -451,8 +456,8 @@ export const planDeckWithLLM = async (args: {
       return {
         title,
         contentOutline: normalizeOutlineText(keyPoints.join('；')),
-        // 保留规划 keyPoints：锁定版式模式按列表槽容量取用
-        items: keyPoints.slice(0, 8),
+        // 结构化内容包：带 value/unit/priority，锁定模式按槽位取用
+        items: structuredEntries,
         layoutIntent,
         contentStructure,
         moduleCount,
@@ -709,7 +714,8 @@ export const planNewPage = async (args: {
   if (!title) {
     throw new Error('LLM plan_new_page missing title field.')
   }
-  const keyPoints = normalizeKeyPoints(item.keyPoints)
+  const structuredEntries = normalizeOutlineEntries(item.keyPoints)
+  const keyPoints = structuredEntries.map((entry) => entry.label)
   const contentOutline = normalizeOutlineText(keyPoints.join('；'))
   const layoutIntent = normalizeLayoutIntent(item.layoutIntent)
   const contentStructure = normalizeContentStructure(item.contentStructure)

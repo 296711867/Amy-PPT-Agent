@@ -30,7 +30,7 @@ import { retireActiveSessionPagesForReplacement } from './session-page-replaceme
 import { prepareDeckImageAssets } from './deck-images'
 import { assignDeckBackgroundAssets, prepareDeckBackgroundAssets } from './deck-backgrounds'
 import { assignLayoutAssetsToOutline } from '@shared/layout-asset'
-import { blankMetricSlots, fillLayoutAsset } from '../layout-assets/fill'
+import { blankMetricSlots, contentPackageToFill, fillLayoutAsset } from '../layout-assets/fill'
 import {
   ensureLayoutLibrary,
   readLayoutManifest,
@@ -739,13 +739,21 @@ export async function executeDeckGeneration(
         | { kind: 'list'; maxItems: number }
         | undefined
       const rawItems = Array.isArray(outline.items) ? outline.items : []
-      const listItems = listSlot ? rawItems.slice(0, listSlot.maxItems) : []
-      const leftover = listSlot ? rawItems.slice(listSlot.maxItems) : []
-      const body = [outline.contentOutline, ...leftover].filter(Boolean).join('；')
+      const structuredEntries = rawItems.map((entry) =>
+        typeof entry === 'string' ? { id: '', label: entry } : entry
+      )
+      const structuredFill = contentPackageToFill(rawItems)
+      const listItems = listSlot ? (structuredFill.listItems || []).slice(0, listSlot.maxItems) : []
+      const leftoverLabels = listSlot
+        ? structuredEntries.slice(listSlot.maxItems).map((entry) => entry.label)
+        : structuredEntries.map((entry) => entry.label)
+      const metricValues = structuredFill.metrics || []
+      const body = [outline.contentOutline, ...leftoverLabels].filter(Boolean).join('；')
       let filled = fillLayoutAsset(assigned, skeleton, {
         title: outline.title,
         body,
-        listItems
+        listItems,
+        ...(metricValues.length > 0 ? { metrics: metricValues } : {})
       })
       filled = blankMetricSlots(assigned, filled)
       await fs.promises.writeFile(page.htmlPath, filled, 'utf-8')

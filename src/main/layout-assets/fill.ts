@@ -14,6 +14,21 @@ export type LayoutFillContent = {
   media?: Array<{ src: string }>
 }
 
+import type { OutlineItemEntry } from '@shared/generation'
+
+/** 从结构化内容包构建填充参数。 */
+export function contentPackageToFill(entries: OutlineItemEntry[]): Pick<LayoutFillContent, 'listItems' | 'metrics'> {
+  const structured = entries.map((entry) => (typeof entry === 'string' ? { id: '', label: entry } : entry))
+  const listLabels = structured.map((entry) => entry.label)
+  const metricValues = structured
+    .filter((entry) => entry.displayValue || (entry.value !== undefined && entry.value !== null))
+    .map((entry) => entry.displayValue || `${entry.value}${entry.unit || ''}`)
+  return {
+    listItems: listLabels,
+    ...(metricValues.length > 0 ? { metrics: metricValues } : {})
+  }
+}
+
 /** 无数据指标槽置为占位横线，避免残留模板示例数字。 */
 export const blankMetricSlots = (asset: LayoutAsset, html: string): string => {
   let next = html

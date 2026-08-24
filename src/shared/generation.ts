@@ -7,6 +7,27 @@ import type {
 } from './universal-layouts'
 import type { GenerationFailureInfo } from './generation-error'
 
+/** 单个内容要点的结构化表示（锁定版式模式的数据源）。 */
+export type OutlineItemPriority = 'primary' | 'supporting' | 'detail'
+export interface OutlineItemData {
+  /** 稳定 id，用于跨方案追踪同一要点。 */
+  id: string
+  /** 要点短标签（≤32 字）。 */
+  label: string
+  /** 数值（如有）：指标值、百分比等。 */
+  value?: string | number
+  /** 数值单位（如有）：%、万、亿等。 */
+  unit?: string
+  /** 展示用格式化值（如 "42.7%"），优先于 value+unit。 */
+  displayValue?: string
+  /** 补充说明（≤60 字）。 */
+  detail?: string
+  /** 要点在本页中的角色。 */
+  priority?: OutlineItemPriority
+}
+
+export type OutlineItemEntry = string | OutlineItemData
+
 /** A generated slide's semantic plan, shared by planning, generation, and page tools. */
 export interface OutlineItem {
   title: string
@@ -28,8 +49,8 @@ export interface OutlineItem {
   layoutId?: UniversalLayoutId | string
   layoutPrompt?: string
   imagePolicy?: ImagePolicy
-  /** 规划期 keyPoints（短要点原文），锁定版式模式下列表槽的数据源。 */
-  items?: string[]
+  /** 规划期 keyPoints（结构化要点），锁定版式模式下列表/指标槽的数据源。 */
+  items?: OutlineItemEntry[]
   imageAssetPath?: string
   imageAssetPaths?: string[]
   /** Reusable full-canvas background assigned from the deck background package. */
