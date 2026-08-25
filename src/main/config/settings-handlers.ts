@@ -36,15 +36,11 @@ const readGlobalTimeouts = (
     ])
   ) as Record<ConfigurableModelTimeoutProfile, number>
 
-const VALID_PROVIDERS = [
-  'anthropic',
-  'openai',
-  'openai-responses',
-  'google',
-  'zhipu',
-  'deepseek',
-  'kimi'
-] as const
+// Provider 注册表驱动：从注册表枚举，不再硬编码列表
+import { listModelProviderIds } from '../agent-runtime/registry/provider-registry'
+import '../agent-runtime/registry/providers' // import 副作用：注册全部 Provider
+
+const VALID_PROVIDERS = listModelProviderIds() as unknown as readonly string[]
 type Provider = (typeof VALID_PROVIDERS)[number]
 const normalizeProvider = (provider: unknown): Provider =>
   VALID_PROVIDERS.includes(provider as Provider) ? (provider as Provider) : 'openai'

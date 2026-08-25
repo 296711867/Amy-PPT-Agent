@@ -1,15 +1,6 @@
-import { ChatAnthropic } from '@langchain/anthropic'
 import type { BaseLanguageModel } from '@langchain/core/language_models/base'
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
-import { ChatOpenAICompletions } from '@langchain/openai'
 import log from 'electron-log/main.js'
-import {
-  buildOpenAIModelOptions,
-  isOpenAIResponsesProvider,
-  normalizeOpenAIBaseUrl,
-  resolveOpenAIThinkingModelKwargs
-} from './options'
-import { CompatibleChatOpenAIResponses } from './responses-compat'
+import { isOpenAIResponsesProvider, normalizeOpenAIBaseUrl, resolveOpenAIThinkingModelKwargs } from './options'
 import {
   getCurrentModelTemperatureControl,
   isCurrentModelTemperatureEnabled,
@@ -18,6 +9,9 @@ import {
 } from './runtime'
 import { ModelUsageCallbackHandler } from './usage'
 import type { ModelRuntimeConfig } from './usage'
+// Provider 注册表：import 即注册全部内置 Provider
+import '../registry/providers'
+import { getModelProvider } from '../registry/provider-registry'
 
 export function resolveModel(
   provider: string,
@@ -32,18 +26,20 @@ export function resolveModel(
   if (!resolvedModel) {
     throw new Error('model 不能为空，请先在系统设置中配置模型。')
   }
+
+  const providerDef = getModelProvider(provider)
+  if (!providerDef) {
+    throw new Error(`Unknown provider: ${provider}`)
+  }
+
   const temperatureOptions = resolveCurrentModelTemperatureOptions(temperature)
-  const resolvedTemperature = temperatureOptions.temperature
   const temperatureControl = getCurrentModelTemperatureControl()
   const thinkingParameterMode = resolveCurrentModelThinkingParameterMode()
   const resolvedBaseUrl = typeof baseUrl === 'string' ? baseUrl.trim() : ''
   const resolvedMaxTokens = maxTokens && maxTokens > 0 ? maxTokens : 4096
   const useOpenAIResponsesApi = isOpenAIResponsesProvider(provider)
-  const isZhipuProvider = provider === 'zhipu'
-  const isDeepSeekProvider = provider === 'deepseek'
-  const isKimiProvider = provider === 'kimi'
   const openAIProtocol =
-    provider === 'openai' || isZhipuProvider || isDeepSeekProvider || isKimiProvider
+    provider === 'openai' || provider === 'zhipu' || provider === 'deepseek' || provider === 'kimi'
       ? 'chat-completions'
       : useOpenAIResponsesApi
         ? 'responses'
@@ -67,7 +63,7 @@ export function resolveModel(
     provider,
     model: resolvedModel,
     baseUrl: resolvedBaseUrl,
-    temperature: resolvedTemperature ?? null,
+    temperature: temperatureOptions.temperature ?? null,
     temperatureEnabled: isCurrentModelTemperatureEnabled(),
     temperatureControlBound: temperatureControl !== undefined,
     modelConfigId: temperatureControl?.modelConfigId ?? null,
@@ -77,97 +73,14 @@ export function resolveModel(
     openAICompatibility: 'thinking' in openAIThinkingModelKwargs ? ['thinking.type=disabled'] : []
   })
 
-  switch (provider) {
-    case 'openai':
-      return new ChatOpenAICompletions({
-        ...buildOpenAIModelOptions({
-          model: resolvedModel,
-          apiKey,
-          baseUrl: resolvedBaseUrl,
-          temperatureOptions,
-          maxTokens: resolvedMaxTokens,
-          thinkingParameterMode
-        }),
-        callbacks: [usageCallback]
-      })
-    case 'zhipu':
-      // 智谱 AI（BigModel）提供 OpenAI 兼容的 Chat Completions 接口，
-      // 复用 OpenAI 链路；强制不发送 thinking 参数，避免智谱接口报错。
-      return new ChatOpenAICompletions({
-        ...buildOpenAIModelOptions({
-          model: resolvedModel,
-          apiKey,
-          baseUrl: resolvedBaseUrl,
-          temperatureOptions,
-          maxTokens: resolvedMaxTokens,
-          // GLM-4.5/4.6 may otherwise consume the whole output budget as hidden
-          // reasoning and leave message.content empty during JSON generation.
-          // Keep the explicit "omit" setting available for older gateways.
-          thinkingParameterMode
-        }),
-        callbacks: [usageCallback]
-      })
-    case 'deepseek':
-      // DeepSeek 官方 OpenAI 兼容端点 https://api.deepseek.com，
-      // 模型 deepseek-v4-flash / deepseek-v4-pro；thinking 参数按用户设置透传。
-      return new ChatOpenAICompletions({
-        ...buildOpenAIModelOptions({
-          model: resolvedModel,
-          apiKey,
-          baseUrl: resolvedBaseUrl,
-          temperatureOptions,
-          maxTokens: resolvedMaxTokens,
-          thinkingParameterMode
-        }),
-        callbacks: [usageCallback]
-      })
-    case 'kimi':
-      // Kimi（Moonshot）OpenAI 兼容端点 https://api.kimi.com/coding/v1，
-      // 模型 kimi-for-coding / k3 / k3-256k / kimi-for-coding-highspeed；
-      // K3 支持 reasoning_effort，关闭 thinking 会被路由到 K2.6，参数按用户设置透传。
-      return new ChatOpenAICompletions({
-        ...buildOpenAIModelOptions({
-          model: resolvedModel,
-          apiKey,
-          baseUrl: resolvedBaseUrl,
-          temperatureOptions,
-          maxTokens: resolvedMaxTokens,
-          thinkingParameterMode
-        }),
-        callbacks: [usageCallback]
-      })
-    case 'openai-responses':
-      return new CompatibleChatOpenAIResponses({
-        ...buildOpenAIModelOptions({
-          model: resolvedModel,
-          apiKey,
-          baseUrl: resolvedBaseUrl,
-          temperatureOptions,
-          maxTokens: resolvedMaxTokens,
-          useResponsesApi: true,
-          thinkingParameterMode
-        }),
-        callbacks: [usageCallback]
-      })
-    case 'anthropic':
-      return new ChatAnthropic({
-        model: resolvedModel,
-        apiKey,
-        ...temperatureOptions,
-        maxTokens: resolvedMaxTokens,
-        anthropicApiUrl: resolvedBaseUrl || undefined,
-        callbacks: [usageCallback]
-      })
-    case 'google':
-      return new ChatGoogleGenerativeAI({
-        model: resolvedModel,
-        apiKey,
-        ...temperatureOptions,
-        maxOutputTokens: resolvedMaxTokens,
-        baseUrl: resolvedBaseUrl || undefined,
-        callbacks: [usageCallback]
-      })
-    default:
-      throw new Error(`Unknown provider: ${provider}`)
-  }
+  return providerDef.createModel({
+    apiKey,
+    model: resolvedModel,
+    baseUrl: resolvedBaseUrl,
+    temperature,
+    maxTokens: resolvedMaxTokens,
+    usageCallback,
+    temperatureOptions,
+    thinkingParameterMode
+  })
 }
