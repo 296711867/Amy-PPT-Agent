@@ -9,8 +9,8 @@ import fs from 'fs'
 import path from 'path'
 import { ipcMain } from 'electron'
 import log from 'electron-log/main.js'
-import type { IpcContext } from '../ipc/context'
 import { parseJsonObject } from '../ipc/utils'
+import type { GenerationDbPort } from './context'
 import {
   readLayoutManifest,
   readLayoutSkeleton
@@ -28,7 +28,7 @@ type PageLayoutBinding = {
 }
 
 const readBindings = async (
-  db: IpcContext['db'],
+  db: LayoutControlContext['db'],
   sessionId: string
 ): Promise<Record<string, PageLayoutBinding>> => {
   const session = await db.getSession(sessionId)
@@ -123,8 +123,13 @@ const applyPalette = (html: string, paletteId: string): string => {
 
 // ── 共享的重填充辅助 ─────────────────────────────────────────
 
+/** 版式控件所需的数据库访问能力（窄接口，不依赖 IPC facade）。 */
+type LayoutControlContext = {
+  db: Pick<GenerationDbPort, 'listSessionPages' | 'getSession' | 'updateSessionMetadata'>
+}
+
 const refillAndWrite = async (
-  ctx: IpcContext,
+  ctx: LayoutControlContext,
   sessionId: string,
   pageId: string,
   binding: PageLayoutBinding,
@@ -186,7 +191,7 @@ const refillAndWrite = async (
 
 // ── IPC 处理器 ───────────────────────────────────────────────
 
-export function registerLayoutControlHandlers(ctx: IpcContext): void {
+export function registerLayoutControlHandlers(ctx: LayoutControlContext): void {
   /** 获取某页的可调参数（是否有版式绑定、模块数范围、可用版式列表）。 */
   ipcMain.handle(
     'pages:getLayoutControls',

@@ -3,12 +3,21 @@
  */
 import { ipcMain } from 'electron'
 import log from 'electron-log/main.js'
-import type { IpcContext } from '../ipc/context'
-import { replaySessionSummary } from '../generation/session-event-log'
+import { replaySessionSummary, type SessionEvent } from './session-event-log'
 import { loadProfile, resolveProfilePath, createDefaultProfileTemplate } from '../config/profile'
 import fs from 'fs'
 
-export function registerSessionEventHandlers(ctx: IpcContext): void {
+/** 事件处理器所需的数据库访问能力（窄接口，不依赖 IPC facade）。 */
+type SessionEventContext = {
+  db: {
+    listSessionEvents(
+      sessionId: string,
+      options?: { eventType?: string; limit?: number }
+    ): Promise<SessionEvent[]>
+  }
+}
+
+export function registerSessionEventHandlers(ctx: SessionEventContext): void {
   /** 列出会话的事件流（审计/回放）。 */
   ipcMain.handle(
     'session:listEvents',
