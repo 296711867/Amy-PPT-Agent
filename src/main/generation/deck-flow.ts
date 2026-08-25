@@ -39,6 +39,7 @@ import {
 import { createWorkflowTelemetry } from './workflow-telemetry'
 import { validateAssetIntegrity } from './asset-integrity'
 import { preflightSpecCheck } from './preflight-spec'
+import { generationBus } from './generation-events'
 import { diversifyUniversalLayoutSequence } from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
@@ -359,6 +360,20 @@ export async function executeDeckGeneration(
     scaffoldPromise
   ])
   await db.updateSessionDesignContract(context.sessionId, designContract)
+  // 事件总线：规划完成 → 插件可修改 outline（前置校准、内容丰富等）
+  await generationBus.emit('generate:after-planning', {
+    sessionId: context.sessionId,
+    runId: context.runId,
+    outline: plannedOutlineItems,
+    totalPages: pageRefs.length,
+    usedSourcePlan: shouldUseSourcePlan
+  })
+  // 事件总线：设计契约完成 → 插件可注入额外视觉方向
+  await generationBus.emit('generate:after-design', {
+    sessionId: context.sessionId,
+    runId: context.runId,
+    designContract
+  })
   const plannedOutline = diversifyUniversalLayoutSequence(
     pageRefs.map((page, index) => {
       const planned = plannedOutlineItems[index]
@@ -1312,6 +1327,13 @@ export async function executeDeckGeneration(
     totalRefs: integrityReport.totalReferences,
     violations: integrityReport.violations.length
   })
+  // 事件总线：资产完整性结果 → 插件可追加修复逻辑
+  await generationBus.emit('deck:asset-integrity', {
+    sessionId: context.sessionId,
+    runId: context.runId,
+    violations: integrityReport.violations,
+    totalReferences: integrityReport.totalReferences
+  })
   if (integrityReport.violations.length > 0) {
     emitDeckChunk({
       type: 'llm_status',
@@ -1329,6 +1351,15 @@ export async function executeDeckGeneration(
       }
     })
   }
+
+  // 事件总线：整套完成前 → 插件可做最终校验/修改（视觉审阅、资产完整性等）
+  await generationBus.emit('deck:before-finalize', {
+    sessionId: context.sessionId,
+    runId: context.runId,
+    totalPages: pageRefs.length,
+    completedPages: pageDescriptors.length - failedPages.length,
+    failedPages: failedPages.length
+  })
 
   // 遥测落盘 + 日志汇总
   telemetry.logSummary()
