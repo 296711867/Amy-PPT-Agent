@@ -186,7 +186,10 @@ export const IPC_INVOKE_CHANNELS = [
   'pages:adjustModuleCount',
   'pages:switchPalette',
   'pages:reorderFocus',
-  'pages:switchLayout'
+  'pages:switchLayout',
+  'session:listEvents',
+  'session:getEventSummary',
+  'app:getProfile'
 ] as const
 
 export const IPC_EVENT_CHANNELS = [

@@ -42,6 +42,7 @@ import { registerStyleSwitchJobHandlers } from '../edit-jobs/style-switch-job-se
 import { registerMasterHandlers } from '../session/master-handlers'
 import { registerLayoutAssetHandlers } from '../layout-assets/handlers'
 import { registerLayoutControlHandlers } from '../generation/layout-controls'
+import { registerSessionEventHandlers } from '../generation/session-event-handlers'
 
 export { registerLocalAssetProtocol }
 
@@ -116,6 +117,7 @@ export function setupIPC(
   registerPptxImportHandlers(context)
   registerLayoutAssetHandlers(context)
   registerLayoutControlHandlers(context)
+  registerSessionEventHandlers(context)
   registerHistoryHandlers(context)
   registerPresentationHandlers(context)
   registerSpeechHandlers(context)

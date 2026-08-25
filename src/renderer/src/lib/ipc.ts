@@ -1126,6 +1126,42 @@ export const ipc = {
       layoutAssetId: string
       htmlPath: string
     }>,
+  listSessionEvents: (sessionId: string, options?: { eventType?: string; limit?: number }) =>
+    getIpc().invoke('session:listEvents', { sessionId, ...options }) as Promise<{
+      events: Array<{
+        id: number
+        sessionId: string
+        runId: string | null
+        sequence: number
+        eventType: string
+        payload: Record<string, unknown>
+        actor: string
+        createdAt: number
+      }>
+    }>,
+  getSessionEventSummary: (sessionId: string) =>
+    getIpc().invoke('session:getEventSummary', { sessionId }) as Promise<{
+      totalRuns: number
+      totalGenerations: number
+      totalAdjustments: number
+      totalEdits: number
+      totalFailures: number
+      lastEventType: string | null
+      timeline: Array<{
+        sequence: number
+        eventType: string
+        actor: string
+        summary: string
+        createdAt: number
+      }>
+    }>,
+  getProfile: () =>
+    getIpc().invoke('app:getProfile') as Promise<{
+      profilePath: string
+      exists: boolean
+      profile: Record<string, unknown>
+      template: string
+    }>,
   chooseAndUploadAssets: (sessionId: string, assetType: 'image' | 'video' = 'image') =>
     getIpc().invoke('assets:chooseAndUpload', { sessionId, assetType }) as Promise<{
       assets: UploadedAsset[]
