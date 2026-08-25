@@ -96,6 +96,26 @@ export const generationRuns = sqliteTable('generation_runs', {
   updatedAt: integer('updated_at').notNull()
 })
 
+export const sessionEvents = sqliteTable(
+  'session_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    runId: text('run_id'),
+    sequence: integer('sequence').notNull(),
+    eventType: text('event_type').notNull(),
+    payload: text('payload').notNull().default('{}'),
+    actor: text('actor').notNull().default('system'),
+    createdAt: integer('created_at').notNull()
+  },
+  (table) => [
+    index('idx_session_events_session').on(table.sessionId, table.sequence),
+    index('idx_session_events_type').on(table.sessionId, table.eventType)
+  ]
+)
+
 export const sessionJobs = sqliteTable(
   'session_jobs',
   {

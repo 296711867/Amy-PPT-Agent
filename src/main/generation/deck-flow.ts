@@ -368,6 +368,27 @@ export async function executeDeckGeneration(
     totalPages: pageRefs.length,
     usedSourcePlan: shouldUseSourcePlan
   })
+  // 会话事件日志：记录规划决策
+  await db.appendSessionEvent({
+    sessionId: context.sessionId,
+    runId: context.runId,
+    eventType: 'planning/completed',
+    payload: {
+      totalPages: pageRefs.length,
+      usedSourcePlan: shouldUseSourcePlan,
+      outlineTitles: plannedOutlineItems.slice(0, 20).map((item) => item.title)
+    }
+  }).catch(() => undefined)
+  // 会话事件日志：记录设计契约
+  await db.appendSessionEvent({
+    sessionId: context.sessionId,
+    runId: context.runId,
+    eventType: 'design-contract/set',
+    payload: {
+      theme: designContract.theme,
+      background: designContract.background?.slice(0, 100)
+    }
+  }).catch(() => undefined)
   // 事件总线：设计契约完成 → 插件可注入额外视觉方向
   await generationBus.emit('generate:after-design', {
     sessionId: context.sessionId,
@@ -1363,6 +1384,19 @@ export async function executeDeckGeneration(
 
   // 遥测落盘 + 日志汇总
   telemetry.logSummary()
+  // 会话事件日志：记录运行完成
+  await db.appendSessionEvent({
+    sessionId: context.sessionId,
+    runId: context.runId,
+    eventType: 'run/completed',
+    actor: 'ai',
+    payload: {
+      totalPages: pageRefs.length,
+      completedPages: pageDescriptors.length,
+      failedPages: failedPages.length,
+      totalMs: telemetry.toMetadata().totalMs
+    }
+  }).catch(() => undefined)
   const telemetryMetadata = telemetry.toMetadata()
   // 版式绑定持久化：控件面板免 AI 重渲染的数据源
   const pageLayoutBindings = Object.fromEntries(lockedPageBindings.entries())

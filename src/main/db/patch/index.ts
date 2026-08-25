@@ -104,6 +104,19 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS session_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  run_id TEXT,
+  sequence INTEGER NOT NULL,
+  event_type TEXT NOT NULL,
+  payload TEXT NOT NULL DEFAULT '{}',
+  actor TEXT NOT NULL DEFAULT 'system',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_events_session ON session_events(session_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_session_events_type ON session_events(session_id, event_type);
+
 ${SETTINGS_TABLE_SQL}
 
 CREATE TABLE IF NOT EXISTS model_configs (

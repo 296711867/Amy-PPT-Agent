@@ -2,6 +2,11 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { eq, ne, gt, lte, count, max, asc, desc, sql, and, or, isNull, inArray } from 'drizzle-orm'
 import * as schema from './schema'
+import {
+  toInsertValues,
+  rowToSessionEvent,
+  type SessionEvent
+} from '../generation/session-event-log'
 import path from 'path'
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
@@ -1185,6 +1190,65 @@ export class PPTDatabase {
       created_at: Number(row.createdAt ?? row.created_at ?? 0) || 0,
       updated_at: Number(row.updatedAt ?? row.updated_at ?? 0) || 0
     }
+  }
+
+  // ── 会话事件日志（append-only，支持审计/回放/时间旅行） ──────
+
+  async appendSessionEvent(data: {
+    sessionId: string
+    runId?: string | null
+    eventType: string
+    payload?: Record<string, unknown>
+    actor?: string
+  }): Promise<number> {
+    const values = toInsertValues({
+      sessionId: data.sessionId,
+      runId: data.runId,
+      eventType: data.eventType as never,
+      payload: data.payload,
+      actor: data.actor as never
+    })
+    const result = await this.db
+      .insert(schema.sessionEvents)
+      .values(values)
+      .returning({ id: schema.sessionEvents.id })
+    return result[0]?.id ?? 0
+  }
+
+  async listSessionEvents(
+    sessionId: string,
+    options: { eventType?: string; limit?: number } = {}
+  ): Promise<SessionEvent[]> {
+    const conditions = [eq(schema.sessionEvents.sessionId, sessionId)]
+    if (options.eventType) {
+      conditions.push(eq(schema.sessionEvents.eventType, options.eventType))
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.sessionEvents)
+      .where(and(...conditions))
+      .orderBy(asc(schema.sessionEvents.sequence))
+      .limit(Math.min(options.limit || 200, 1000))
+    return rows.map((row) =>
+      rowToSessionEvent({
+        id: row.id,
+        sessionId: row.sessionId,
+        runId: row.runId,
+        sequence: row.sequence,
+        eventType: row.eventType,
+        payload: row.payload,
+        actor: row.actor,
+        createdAt: row.createdAt
+      })
+    )
+  }
+
+  async getSessionEventCount(sessionId: string): Promise<number> {
+    const result = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.sessionEvents)
+      .where(eq(schema.sessionEvents.sessionId, sessionId))
+    return result[0]?.count ?? 0
   }
 
   async createGenerationRun(data: GenerationRunCreateData): Promise<string> {

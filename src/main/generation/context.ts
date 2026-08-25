@@ -56,6 +56,7 @@ import { sourcePlanFromSkeletonRows } from './source-plan'
 export type GenerationDbPort = Pick<
   PPTDatabase,
   | 'addMessage'
+  | 'appendSessionEvent'
   | 'createGenerationRun'
   | 'createGenerationRunWithSessionJob'
   | 'createProject'
