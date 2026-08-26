@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BarChart3, Image as ImageIcon, Table as TableIcon } from 'lucide-react'
+import type { VisualElementLevel } from '@shared/generation'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Textarea } from '../components/ui/Input'
@@ -112,6 +114,11 @@ export function SessionCreatePage(): ReactElement {
   const [slideSizeId, setSlideSizeId] = useState<SlideSizePresetId>(DEFAULT_SLIDE_SIZE_ID)
   const [generateImagesWithAi, setGenerateImagesWithAi] = useState(false)
   const [useLockedLayouts, setUseLockedLayouts] = useState(false)
+  const [visualElementPrefs, setVisualElementPrefs] = useState({
+    charts: 'none' as VisualElementLevel,
+    images: 'none' as VisualElementLevel,
+    tables: 'none' as VisualElementLevel
+  })
   const [generateDeckBackgrounds, setGenerateDeckBackgrounds] = useState(false)
   const [generateCoverBackground, setGenerateCoverBackground] = useState(true)
   const [generateContentBackgrounds, setGenerateContentBackgrounds] = useState(true)
@@ -317,6 +324,7 @@ export function SessionCreatePage(): ReactElement {
         fontSelection,
         imagePolicy: generateImagesWithAi ? 'ai' : 'placeholder',
         generationMode: useLockedLayouts ? 'locked' : 'creative',
+        visualElementPreferences: visualElementPrefs,
         deckBackgroundPolicy: {
           enabled: generateDeckBackgrounds,
           coverEnabled: generateCoverBackground,
@@ -1054,6 +1062,57 @@ export function SessionCreatePage(): ReactElement {
                       </span>
                     </button>
                   </div>
+                </section>
+
+                <section>
+                  <label className="mb-2 block text-xs font-medium text-foreground">
+                    {t('home.visualElementLabel')}
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {([
+                      { key: 'charts' as const, icon: BarChart3 },
+                      { key: 'images' as const, icon: ImageIcon },
+                      { key: 'tables' as const, icon: TableIcon }
+                    ]).map(({ key, icon: Icon }) => (
+                      <div key={key} className="rounded-md border border-[var(--ui-border-strong)]/70 bg-[var(--ui-surface-elevated)]/60 p-2">
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <Icon className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-[11px] font-semibold text-foreground">
+                            {key === 'charts' && t('home.visualElementCharts')}
+                            {key === 'images' && t('home.visualElementImages')}
+                            {key === 'tables' && t('home.visualElementTables')}
+                          </span>
+                        </div>
+                        <div className="flex gap-1">
+                          {(['none', 'few', 'moderate', 'rich'] as const).map((level) => (
+                            <button
+                              key={level}
+                              type="button"
+                              onClick={() =>
+                                setVisualElementPrefs((prev) => ({
+                                  ...prev,
+                                  [key]: level
+                                }))
+                              }
+                              className={`flex-1 rounded border px-1 py-0.5 text-[10px] font-medium transition-colors ${
+                                visualElementPrefs[key] === level
+                                  ? 'border-primary bg-[var(--ui-action-soft)]/50 text-foreground'
+                                  : 'border-border bg-muted/30 text-muted-foreground hover:border-[var(--ui-focus)]'
+                              }`}
+                            >
+                              {level === 'none' && t('home.visualElementLevel.none')}
+                              {level === 'few' && t('home.visualElementLevel.few')}
+                              {level === 'moderate' && t('home.visualElementLevel.moderate')}
+                              {level === 'rich' && t('home.visualElementLevel.rich')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                    {t('home.visualElementHint')}
+                  </p>
                 </section>
 
                 <section className="rounded-md border border-[var(--ui-border-strong)]/70 bg-white/55 p-3">

@@ -265,6 +265,16 @@ export const en = {
     generationModeCreative: 'Creative',
     generationModeCreativeHint:
       'AI designs every slide in the selected style; freer expression, slower.',
+    visualElementLabel: 'Content format',
+    visualElementCharts: 'Charts',
+    visualElementImages: 'Images',
+    visualElementTables: 'Tables',
+    visualElementHint:
+      'When set, the AI planner proactively assigns charts/images/tables to suitable pages (e.g., data trends get charts, comparisons get tables).',
+    'visualElementLevel.none': 'None',
+    'visualElementLevel.few': '1-2',
+    'visualElementLevel.moderate': '3-5',
+    'visualElementLevel.rich': 'Rich',
     imageModePlaceholderHint:
       'No image model needed. Image layouts get replaceable semantic placeholder blocks (subject notes + swap hint) you can replace manually or with AI later.',
     generateDeckBackgrounds: 'Generate PPT backgrounds',

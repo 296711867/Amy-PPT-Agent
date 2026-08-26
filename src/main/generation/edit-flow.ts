@@ -400,6 +400,7 @@ export async function resolveEditContext(
     fontSelection: common.fontSelection,
     imagePolicy: common.imagePolicy,
     generationMode: common.generationMode,
+    visualElementPreferences: common.visualElementPreferences,
     deckBackgroundPolicy: common.deckBackgroundPolicy,
     animationPreferences: null
   }

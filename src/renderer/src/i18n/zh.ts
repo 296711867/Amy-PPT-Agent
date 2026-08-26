@@ -248,6 +248,16 @@ export const zh = {
       '用你上传的企业模板版式直接填充内容，秒级完成、品牌视觉完整保留。首次使用请先在首页导入公司 PPTX 模板。',
     generationModeCreative: '自由创作',
     generationModeCreativeHint: '由 AI 按所选风格逐页设计，表达更自由，耗时更长。',
+    visualElementLabel: '内容形式',
+    visualElementCharts: '图表',
+    visualElementImages: '图片',
+    visualElementTables: '表格',
+    visualElementHint:
+      '选择后 AI 会在规划大纲时主动把图表/图片/表格分配到合适的页面（如数据趋势页用图表、对比页用表格）。',
+    'visualElementLevel.none': '不需要',
+    'visualElementLevel.few': '1-2 个',
+    'visualElementLevel.moderate': '3-5 个',
+    'visualElementLevel.rich': '多用',
     imageModePlaceholderHint:
       '不调用生图模型。需要图片的版式会生成带语义描述的可替换占位块（标注画面主题与替换提示），稍后可手动或用 AI 替换。',
     generateDeckBackgrounds: '生成 PPT 背景图',

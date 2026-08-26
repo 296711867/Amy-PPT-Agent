@@ -128,6 +128,7 @@ export async function resolveDeckContext(
     fontSelection: common.fontSelection,
     imagePolicy: common.imagePolicy,
     generationMode: common.generationMode,
+    visualElementPreferences: common.visualElementPreferences,
     deckBackgroundPolicy: common.deckBackgroundPolicy,
     animationPreferences: input.animationPreferences
   }
@@ -281,6 +282,7 @@ export async function executeDeckGeneration(
           topic: context.topic,
           userMessage: context.userMessage,
           sourceDocumentPaths: context.sourceDocumentPaths,
+          visualElementPreferences: context.visualElementPreferences,
           emit: (chunk) => emitDeckChunk(chunk),
           runId: context.runId,
           signal: context.abortSignal

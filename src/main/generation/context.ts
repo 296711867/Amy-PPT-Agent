@@ -16,6 +16,7 @@ import {
   normalizeFontSelection,
   normalizeGenerationMode,
   normalizeImagePolicy,
+  normalizeVisualElementPreferences,
   normalizeSessionPageEditPlan,
   normalizeSelectPageIds
 } from '@shared/generation'
@@ -227,6 +228,7 @@ export type CommonGenerationContext = {
   fontSelection: FontSelection
   imagePolicy: import('@shared/generation').ImagePolicy
   generationMode: import('@shared/generation').GenerationMode
+  visualElementPreferences: import('@shared/generation').VisualElementPreferences
   deckBackgroundPolicy: import('@shared/generation').DeckBackgroundPolicy
   sourcePlan: SourceDocumentPlan | null
   projectId: string
@@ -665,6 +667,9 @@ export async function resolveCommonContext(
     fontSelection: normalizeFontSelection(sessionMetadata.fontSelection),
     imagePolicy: normalizeImagePolicy(sessionMetadata.imagePolicy),
     generationMode: normalizeGenerationMode(sessionMetadata.generationMode),
+    visualElementPreferences: normalizeVisualElementPreferences(
+      sessionMetadata.visualElementPreferences
+    ),
     deckBackgroundPolicy: normalizeDeckBackgroundPolicy(sessionMetadata.deckBackgroundPolicy),
     sourcePlan,
     projectId,

@@ -130,6 +130,74 @@ export const resolvePlannedVisualFormat = (
 export type ImagePolicy = 'placeholder' | 'ai'
 
 /**
+ * 视觉元素偏好：用户在创建会话时指定，注入规划 prompt 让 AI 在设计大纲时
+ * 主动分配图表/图片/表格到合适的页面。
+ */
+export type VisualElementLevel = 'none' | 'few' | 'moderate' | 'rich'
+
+export type VisualElementPreferences = {
+  /** 图表（Chart.js 数据图）。 */
+  charts: VisualElementLevel
+  /** 图片（产品图/场景图/示意图）。 */
+  images: VisualElementLevel
+  /** 表格（多维度对比/数据列表）。 */
+  tables: VisualElementLevel
+}
+
+const VISUAL_ELEMENT_LEVELS: readonly VisualElementLevel[] = ['none', 'few', 'moderate', 'rich']
+
+export const DEFAULT_VISUAL_ELEMENT_PREFERENCES: VisualElementPreferences = {
+  charts: 'none',
+  images: 'none',
+  tables: 'none'
+}
+
+const normalizeVisualElementLevel = (value: unknown): VisualElementLevel =>
+  VISUAL_ELEMENT_LEVELS.includes(value as VisualElementLevel)
+    ? (value as VisualElementLevel)
+    : 'none'
+
+export const normalizeVisualElementPreferences = (
+  value: unknown
+): VisualElementPreferences => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return DEFAULT_VISUAL_ELEMENT_PREFERENCES
+  }
+  const record = value as Record<string, unknown>
+  return {
+    charts: normalizeVisualElementLevel(record.charts),
+    images: normalizeVisualElementLevel(record.images),
+    tables: normalizeVisualElementLevel(record.tables)
+  }
+}
+
+/** 把偏好级别转为规划 prompt 的指导文本。 */
+export const formatVisualElementGuidance = (prefs: VisualElementPreferences): string => {
+  const lines: string[] = []
+  const levelText: Record<VisualElementLevel, string> = {
+    none: '',
+    few: '1-2',
+    moderate: '3-5',
+    rich: 'as many as suitable'
+  }
+  if (prefs.charts !== 'none') {
+    lines.push(`- Charts: include ${levelText[prefs.charts]} chart page(s). Assign visualFormat "chart" to pages that present data trends, comparisons, or proportions.`)
+  }
+  if (prefs.images !== 'none') {
+    lines.push(`- Images: include ${levelText[prefs.images]} image-focused page(s). Assign visualFormat "image-focus" to pages where a visual (product photo, scene, or diagram) should dominate.`)
+  }
+  if (prefs.tables !== 'none') {
+    lines.push(`- Tables: include ${levelText[prefs.tables]} table page(s). Assign visualFormat "table" to pages comparing multiple items across dimensions.`)
+  }
+  if (lines.length === 0) return ''
+  return [
+    'Visual element requirements (must be distributed across specific pages in the outline):',
+    ...lines,
+    'When assigning these formats, choose the pages where the content genuinely calls for that visual form — do not force a chart onto a concept page or a table onto a narrative page.'
+  ].join('\n')
+}
+
+/**
  * 生成方式：
  * - creative：现有自由创作，Agent 逐页写 HTML
  * - locked：锁定版式优先 —— 规划出的内容按版式契约确定性填充，

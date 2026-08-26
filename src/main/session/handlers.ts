@@ -12,7 +12,8 @@ import {
   normalizeDeckBackgroundPolicy,
   normalizeFontSelection,
   normalizeGenerationMode,
-  normalizeImagePolicy
+  normalizeImagePolicy,
+  normalizeVisualElementPreferences
 } from '@shared/generation'
 import { requireSlideSizePreset } from '@shared/slide-size'
 import { normalizeSourcePlan } from '../generation/source-plan'
@@ -487,6 +488,7 @@ export function registerSessionHandlers(
     const fontSelection = normalizeFontSelection(record.fontSelection)
     const imagePolicy = normalizeImagePolicy(record.imagePolicy)
     const generationMode = normalizeGenerationMode(record.generationMode)
+    const visualElementPreferences = normalizeVisualElementPreferences(record.visualElementPreferences)
     const deckBackgroundPolicy = normalizeDeckBackgroundPolicy(record.deckBackgroundPolicy)
     const sourcePlan = normalizeSourcePlan(record.sourcePlan)
     const referenceDocumentPath =
@@ -678,6 +680,7 @@ export function registerSessionHandlers(
         fontSelection,
         imagePolicy,
         generationMode,
+        visualElementPreferences,
         deckBackgroundPolicy,
         ...(isThinkingSource ? { source: 'thinking' } : {})
       })

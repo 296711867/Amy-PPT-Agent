@@ -4,6 +4,7 @@ import {
   STABLE_HTML_FRAGMENT_PROTOCOL
 } from "./shared";
 import type { DeckEditScope, SelectedElementRuntimeContext } from '@shared/generation'
+import { formatVisualElementGuidance, type VisualElementPreferences } from '@shared/generation'
 import { INDEX_TRANSITION_TYPES } from "../../../../shared/index-transition";
 import { formatSelectedElementRuntimeContext } from '../selected-element-context'
 
@@ -20,10 +21,14 @@ export function buildPlanningUserPrompt(args: {
   totalPages: number;
   userMessage: string;
   hasSourceMaterials?: boolean;
+  visualElementPreferences?: VisualElementPreferences;
 }): string {
   const hasExplicitPageHint = /第\s*\d+\s*页|(?:page|slide)\s*\d+/i.test(args.userMessage);
   const sourcePlanningRules = args.hasSourceMaterials || hasSourceMaterialCue(args.userMessage)
     ? SOURCE_MATERIAL_PLANNING_RULES
+    : "";
+  const visualElementGuidance = args.visualElementPreferences
+    ? formatVisualElementGuidance(args.visualElementPreferences)
     : "";
   return [
     `Topic: ${args.topic}`,
@@ -33,6 +38,7 @@ export function buildPlanningUserPrompt(args: {
     "",
     "Plan each slide title, key points, layout intent, and universal layout ID. Use short phrases, not long paragraphs.",
     sourcePlanningRules,
+    visualElementGuidance,
     "Output must be a JSON array. Each item must be exactly { title, keyPoints, layoutIntent, contentStructure, moduleCount, visualAspect, contentDensity, layoutId }; choose semantic structure and image geometry before a compatible catalog layoutId; layoutId is a catalog ID or null; keyPoints must contain 1-10 strings.",
     `The array length must be exactly ${args.totalPages}.`,
     "User requirements:",

@@ -418,6 +418,7 @@ export interface CreateSessionPayload {
   fontSelection?: FontSelection
   imagePolicy?: import('@shared/generation').ImagePolicy
   generationMode?: import('@shared/generation').GenerationMode
+  visualElementPreferences?: import('@shared/generation').VisualElementPreferences
   deckBackgroundPolicy?: import('@shared/generation').DeckBackgroundPolicy
   sourcePlan?: SourceDocumentPlan
 }
