@@ -117,11 +117,42 @@ const similarSize = (a: BlockNode, b: BlockNode): boolean => {
   )
 }
 
+/** 企业模板中的 logo/装饰图最小尺寸（更小的图视为品牌元素不可替换）。 */
+const LOGO_MAX_DIM = 80
+/** 页面边缘的 footer/header 判定阈值。 */
+const EDGE_THRESHOLD = 60
+/** footer/header 的字号上限（更小的字视为页眉页脚装饰）。 */
+const HEADER_FOOTER_MAX_FONT = 14
+
+/** 判断是否为企业模板的 logo/装饰图（小尺寸或边缘位置）。 */
+const isDecorativeImage = (block: BlockNode): boolean =>
+  block.rect.width <= LOGO_MAX_DIM ||
+  block.rect.height <= LOGO_MAX_DIM ||
+  block.rect.top < EDGE_THRESHOLD && block.rect.height <= 60
+
+/** 判断是否为页眉/页脚装饰文本（小字+边缘位置）。 */
+const isHeaderFooter = (block: BlockNode, canvasHeight: number): boolean => {
+  if (block.fontSize > HEADER_FOOTER_MAX_FONT) return false
+  if (block.fontSize === 0) return false
+  const nearTop = block.rect.top < EDGE_THRESHOLD
+  const nearBottom = block.rect.top + block.rect.height > canvasHeight - EDGE_THRESHOLD
+  return nearTop || nearBottom
+}
+
 /** 把块分类为内容槽；保守策略：识别不了就不是槽。 */
-export function classifyBlocks(blocks: BlockNode[]): LayoutAssetSlot[] {
-  const textish = blocks.filter((block) => block.kind === 'text' && block.text.length > 0)
+export function classifyBlocks(
+  blocks: BlockNode[],
+  options: { canvasHeight?: number } = {}
+): LayoutAssetSlot[] {
+  const canvasHeight = options.canvasHeight || 900
+  const textish = blocks.filter(
+    (block) =>
+      block.kind === 'text' &&
+      block.text.length > 0 &&
+      !isHeaderFooter(block, canvasHeight)
+  )
   const media = blocks
-    .filter((block) => block.kind === 'image')
+    .filter((block) => block.kind === 'image' && !isDecorativeImage(block))
     .map<LayoutAssetMediaSlot>((block) => ({
       kind: 'media',
       slotId: block.slotId,
@@ -236,7 +267,9 @@ const fingerprint = (blocks: BlockNode[]): string => {
 export function parametrizePageHtml(html: string): ParametrizeResult | null {
   const blocks = extractBlocks(html)
   if (blocks.length === 0) return null
-  const slots = classifyBlocks(blocks)
+  // 从 HTML 中提取画布高度，用于页眉/页脚判定
+  const canvasHeight = Number(html.match(/\bdata-ppt-height=["'](\d+)["']/i)?.[1]) || 900
+  const slots = classifyBlocks(blocks, { canvasHeight })
   const textishSlots = slots.filter((slot) => slot.kind !== 'media')
   if (textishSlots.length === 0) return null
   return {

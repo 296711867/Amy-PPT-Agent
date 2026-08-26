@@ -261,7 +261,7 @@ export const en = {
     generationModeLabel: 'Generation mode',
     generationModeLocked: 'Locked layouts (fast)',
     generationModeLockedHint:
-      'Fill content directly into layouts harvested from your uploaded templates - fast and structurally stable; unmatched pages fall back to creative mode. Import a PPTX on the Templates page first to build the library.',
+      'Fill content directly into your company template layouts — instant, brand visuals fully preserved. Import your company PPTX first to build the library.',
     generationModeCreative: 'Creative',
     generationModeCreativeHint:
       'AI designs every slide in the selected style; freer expression, slower.',
@@ -353,9 +353,9 @@ export const en = {
     pptxPathFailedTitle: 'Cannot read PPTX path',
     pptxPathFailed: 'Please choose a local PPTX file again.',
     pptxPreparing: 'Preparing PPTX import...',
-    pptxImportDone: 'PPTX imported',
-    pptxImportedWithWarnings: 'Imported {pageCount} pages with {warningCount} fallback warning(s).',
-    pptxImported: 'Imported {pageCount} pages.',
+    pptxImportDone: 'PPTX imported — template layouts saved to the library',
+    pptxImportedWithWarnings: 'Imported {pageCount} pages with {warningCount} fallback warning(s). Template saved as layouts; use "Locked layouts" mode to generate.',
+    pptxImported: 'Imported {pageCount} pages. Template saved as layouts — select "Locked layouts" when creating a session to use them.',
     pptxImportFailed: 'Failed to import PPTX'
   },
   sessions: {

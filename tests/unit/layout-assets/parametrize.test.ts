@@ -79,6 +79,62 @@ describe('classifyBlocks', () => {
   })
 })
 
+describe('enterprise template slot filtering', () => {
+  /** 模拟企业模板：logo(小图) + 页眉公司名(小字+顶部) + 页脚页码(小字+底部) + 正文内容。 */
+  const enterpriseFixture = `<!doctype html>
+<html><head><style>section,figure{position:absolute;}</style></head>
+<body>
+<main class="ppt-page-root" data-ppt-slide-size-id="wide-16-9" data-ppt-height="900">
+<figure data-block-id="logo-1" style="position:absolute;left:40px;top:20px;width:60px;height:40px;z-index:1"><img src="./images/logo.png" alt="" style="width:100%;height:100%;object-fit:contain;" /></figure>
+<section data-block-id="header-co" style="position:absolute;left:150px;top:25px;width:300px;height:20px;font-size:12px;z-index:1">XX科技有限公司</section>
+<section data-block-id="title-1" style="position:absolute;left:100px;top:120px;width:800px;height:60px;font-size:36px;z-index:2">项目进度汇报</section>
+<section data-block-id="item-1" style="position:absolute;left:100px;top:280px;width:300px;height:150px;font-size:18px;z-index:2">完成核心模块开发</section>
+<section data-block-id="item-2" style="position:absolute;left:450px;top:280px;width:300px;height:150px;font-size:18px;z-index:2">性能优化达预期</section>
+<section data-block-id="item-3" style="position:absolute;left:800px;top:280px;width:300px;height:150px;font-size:18px;z-index:2">通过安全测试</section>
+<section data-block-id="footer-page" style="position:absolute;left:750px;top:860px;width:100px;height:18px;font-size:11px;z-index:1">第 1 页</section>
+</main>
+</body></html>`
+
+  it('skips small logos and header/footer text, preserves content slots', () => {
+    const blocks = extractBlocks(enterpriseFixture)
+    const slots = classifyBlocks(blocks, { canvasHeight: 900 })
+
+    // Logo（60x40 小图）不应成为媒体槽
+    expect(slots.some((slot) => slot.slotId === 'logo-1')).toBe(false)
+
+    // 页眉公司名（12px 顶部）不应成为内容槽
+    expect(slots.some((slot) => slot.slotId === 'header-co')).toBe(false)
+
+    // 页脚页码（11px 底部）不应成为内容槽
+    expect(slots.some((slot) => slot.slotId === 'footer-page')).toBe(false)
+
+    // 标题和正文条目正常识别
+    const title = slots.find((slot) => slot.kind === 'title') as { slotId: string }
+    expect(title.slotId).toBe('title-1')
+
+    const list = slots.find((slot) => slot.kind === 'list') as { itemSlotIds: string[] }
+    expect(list.itemSlotIds).toHaveLength(3)
+  })
+
+  it('large content images are still captured as media slots', () => {
+    const withContentImage = enterpriseFixture.replace(
+      'data-block-id="logo-1"',
+      'data-block-id="hero-img"'
+    ).replace(
+      'width:60px;height:40px',
+      'width:400px;height:300px'
+    ).replace(
+      'left:40px;top:20px',
+      'left:100px;top:500px'
+    )
+    const blocks = extractBlocks(withContentImage)
+    const slots = classifyBlocks(blocks, { canvasHeight: 900 })
+
+    // 大图（400x300，非边缘）应成为媒体槽
+    expect(slots.some((slot) => slot.slotId === 'hero-img' && slot.kind === 'media')).toBe(true)
+  })
+})
+
 describe('parametrizePageHtml + buildLayoutAssetFromPageHtml', () => {
   it('derives capacity and fingerprint, rejecting slot-less pages', () => {
     const result = parametrizePageHtml(fixturePage)

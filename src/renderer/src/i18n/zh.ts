@@ -245,7 +245,7 @@ export const zh = {
     generationModeLabel: '生成方式',
     generationModeLocked: '锁定版式（快）',
     generationModeLockedHint:
-      '优先用已上传模板沉淀的版式直接填充内容，速度快、结构稳；配不上的页面自动回退自由创作。需要先在模板页导入 PPTX 积累版式。',
+      '用你上传的企业模板版式直接填充内容，秒级完成、品牌视觉完整保留。首次使用请先在首页导入公司 PPTX 模板。',
     generationModeCreative: '自由创作',
     generationModeCreativeHint: '由 AI 按所选风格逐页设计，表达更自由，耗时更长。',
     imageModePlaceholderHint:
@@ -334,9 +334,9 @@ export const zh = {
     pptxPathFailedTitle: '无法读取 PPTX 路径',
     pptxPathFailed: '请重新选择本地 PPTX 文件。',
     pptxPreparing: '正在准备导入 PPTX...',
-    pptxImportDone: 'PPTX 导入完成',
-    pptxImportedWithWarnings: '已导入 {pageCount} 页，存在 {warningCount} 条降级提示。',
-    pptxImported: '已导入 {pageCount} 页。',
+    pptxImportDone: 'PPTX 导入完成，模板版式已保存到版式库',
+    pptxImportedWithWarnings: '已导入 {pageCount} 页，存在 {warningCount} 条降级提示。模板已存为版式，可用"锁定版式"模式生成。',
+    pptxImported: '已导入 {pageCount} 页。模板已存为版式，新建会话时选"锁定版式"即可使用。',
     pptxImportFailed: 'PPTX 导入失败'
   },
   sessions: {
