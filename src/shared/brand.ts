@@ -1,7 +1,7 @@
 export const APP_NAME = 'Amy-PPT'
 export const APP_PACKAGE_NAME = 'amy-ppt'
 export const APP_ID = 'com.amyppt.app'
-export const APP_VERSION = '1.0.3'
+export const APP_VERSION = '1.0.4'
 export const APP_REPOSITORY_URL = 'https://github.com/296711867/Amy-PPT'
 export const APP_RELEASES_URL = `${APP_REPOSITORY_URL}/releases`
 export const DEFAULT_UPDATE_MANIFEST_URL =

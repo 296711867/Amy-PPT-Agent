@@ -23,7 +23,7 @@ describe('Amy-PPT brand contract', () => {
     expect(APP_NAME).toBe('Amy-PPT')
     expect(APP_PACKAGE_NAME).toBe('amy-ppt')
     expect(APP_ID).toBe('com.amyppt.app')
-    expect(APP_VERSION).toBe('1.0.3')
+    expect(APP_VERSION).toBe('1.0.4')
     expect(DEFAULT_UPDATE_MANIFEST_URL).toContain('/296711867/Amy-PPT/')
     expect(DEFAULT_UPDATE_MANIFEST_URL).not.toContain('oh-my-ppt')
   })
@@ -48,7 +48,7 @@ describe('Amy-PPT brand contract', () => {
       homepage: 'https://github.com/296711867/Amy-PPT'
     })
     expect(updateManifest).toMatchObject({
-      version: '1.0.3',
+      version: '1.0.4',
       downloadhome: 'https://github.com/296711867/Amy-PPT/releases'
     })
   })
