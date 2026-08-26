@@ -1,5 +1,15 @@
 # Amy-PPT Changelog
 
+## 1.0.4 - 2026-08-27
+
+- Added the plugin-oriented architecture: model provider registry (DeepSeek and Kimi included), typed generation event bus, append-only session event log, and YAML profiles.
+- Added the enterprise template workflow: automatic layout harvesting from uploaded PPTX with logo/header/footer filtering, plus a per-page layout control panel (module count, palette, focus, and layout switching without AI round-trips).
+- Added visual element preferences so the planner explicitly charts image and table usage into the outline.
+- Added structured content packages with `value` / `unit` / `priority` on key points and deterministic locked-layout filling.
+- Improved workflow performance: shared prompt-rule deduplication, non-blocking visual review, parallel background generation, and a preflight spec gate.
+- Mapped 503/502 service-unavailable responses into the rate-limit backoff class alongside 429.
+- Unified the five UI themes across every page and fixed a layout-library write recursion that could exhaust disk space.
+
 ## 1.0.3 - 2026-08-18
 
 - Added GLM-5.2 reasoning-mode compatibility and fixed shutdown crashes.

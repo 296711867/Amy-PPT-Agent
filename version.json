@@ -1,5 +1,5 @@
 {
   "version": "1.0.4",
-  "downloadhome": "https://github.com/296711867/Amy-PPT/releases",
+  "downloadhome": "https://github.com/296711867/Amy-PPT-Agent/releases",
   "changeLog": "Amy-PPT 1.0.4：插件化架构（模型 Provider 注册表 + 生成事件总线 + 会话事件日志 + YAML Profile）；企业模板工作流（logo/页眉页脚自动过滤、版式控件四件套：模块数/配色/重点/布局）；视觉元素偏好（AI 规划大纲时主动分配图表/图片/表格）；性能优化（提示词去重 40-60%、视觉审阅非阻塞、背景图并行、前置规格拦截）；结构化内容包（keyPoints 带 value/unit/priority）；新增 DeepSeek 和 Kimi 模型接入；503/502 服务不可用自动退避重试；五套主题全页面统一。"
 }

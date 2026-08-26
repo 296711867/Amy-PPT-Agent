@@ -20,7 +20,7 @@
 - `package.json` and `pnpm-lock.yaml`: package contract and reproducible dependency graph.
 - `electron-builder.yml`, `electron.vite.config.ts`, and TypeScript/PostCSS/Tailwind/Vitest configs: build and development configuration.
 - `README.md`, `README_EN.md`, `QUICK_START.md`, `CHANGELOG.md`, `LICENSE`, and `NOTICE`: product documentation and legal attribution.
-- `version.json`: public update manifest for the current `1.0.3` release.
+- `version.json`: public update manifest for the current `1.0.4` release.
 
 ## Local-Only Outputs
 

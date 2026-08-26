@@ -5,7 +5,7 @@
 
 **Agent 驱动、可审查、可编辑的 AI PPT 创作软件**
 
-[English](./README_EN.md) · [更新记录](./CHANGELOG.md) · [问题反馈](https://github.com/296711867/Amy-PPT/issues) · [版本发布](https://github.com/296711867/Amy-PPT/releases)
+[English](./README_EN.md) · [快速使用指南](./QUICK_START.md) · [项目上下文与交接文档](./HANDOFF.md) · [更新记录](./CHANGELOG.md) · [问题反馈](https://github.com/296711867/Amy-PPT-Agent/issues) · [版本发布](https://github.com/296711867/Amy-PPT-Agent/releases)
 
 </div>
 
@@ -20,6 +20,10 @@ Amy-PPT 是一款 Electron 桌面端演示文稿工作台。它不是让模型�
 - Agent 创作：从主题、详细需求或源文档生成整套演示文稿。
 - PPT 排版规则：通过 Layout 规则配置和专家 Markdown 编辑器约束画布、字体、安全区、间距、卡片和叙事结构。
 - 基础版式库：覆盖 1-6 段纯文字、图文混排和 2/3/4/6 图画廊，Agent 会按内容结构选择并轮换相邻页面轮廓。
+- 版式资产系统：内置版式 + 企业模板 PPTX 自动收割，插槽化参数与确定性内容填充，支持零 LLM 的锁定版式模式。
+- 版式控制台：模块数量滑杆、风格内配色切换、页面重点与布局切换，全部本地即时生效。
+- 插件化运行时：模型 Provider 注册表（Anthropic、OpenAI、Responses、Gemini、智谱、DeepSeek、Kimi）、生成事件总线、会话事件日志与 YAML Profile。
+- 视觉元素偏好：创建会话时声明图表/图片/表格用量，规划阶段主动落实到大纲。
 - 质量 Harness：检查 HTML 结构、字号、安全区、溢出、裁切、重叠、画布规格和核心字体。
 - Deck 裁判：检查跨页配色、标题、留白、信息密度、版式节奏与 Web UI 倾向。
 - 叙事裁判：检查内部过程泄漏、重复内容、页面职责、证据解释、开场和结尾，并进行有界定向修复。
@@ -66,10 +70,10 @@ pnpm test -- tests/unit/path/to/test.test.ts
 
 ## 更新发布
 
-Amy-PPT 使用独立更新清单。当前版本为 `1.0.3`：
+Amy-PPT 使用独立更新清单。当前版本为 `1.0.4`：
 
 ```text
-https://raw.githubusercontent.com/296711867/Amy-PPT/main/version.json
+https://raw.githubusercontent.com/296711867/Amy-PPT-Agent/main/version.json
 ```
 
 私有部署或迁移到正式服务器时，可在启动环境中设置：
@@ -82,8 +86,8 @@ AMY_PPT_UPDATE_MANIFEST_URL=https://your-domain.example/version.json
 
 ```json
 {
-  "version": "1.0.3",
-  "downloadhome": "https://github.com/296711867/Amy-PPT/releases",
+  "version": "1.0.4",
+  "downloadhome": "https://github.com/296711867/Amy-PPT-Agent/releases",
   "changeLog": "本次更新内容"
 }
 ```

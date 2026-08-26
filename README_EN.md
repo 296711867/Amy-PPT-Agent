@@ -5,7 +5,7 @@
 
 **An agent-controlled, reviewable, and editable AI presentation studio**
 
-[中文](./README.md) · [Changelog](./CHANGELOG.md) · [Issues](https://github.com/296711867/Amy-PPT/issues) · [Releases](https://github.com/296711867/Amy-PPT/releases)
+[中文](./README.md) · [Changelog](./CHANGELOG.md) · [Quick Start](./QUICK_START.md) · [Handoff](./HANDOFF.md) · [Changelog](./CHANGELOG.md) · [Issues](https://github.com/296711867/Amy-PPT-Agent/issues) · [Releases](https://github.com/296711867/Amy-PPT-Agent/releases)
 
 </div>
 
@@ -20,6 +20,10 @@ For the first-run workflow, see the [quick start guide](./QUICK_START.md) (Chine
 - Agent-driven deck creation from a topic, detailed brief, or source document.
 - Editable Layout Rules and an expert Markdown editor for canvas, typography, safe areas, spacing, cards, and narrative structure.
 - A universal layout library for 1-6 text sections, mixed image/text compositions, and 2/3/4/6-image galleries, with adjacent-slide silhouette rotation.
+- A layout-asset system with builtin layouts, automatic harvesting from enterprise PPTX templates, slot parametrization, deterministic content filling, and a locked-layout zero-LLM mode.
+- A per-page layout console: module-count slider, in-style palette switching, focus and layout switching, all applied locally.
+- A plugin-oriented runtime: model provider registry (Anthropic, OpenAI, Responses, Gemini, Zhipu, DeepSeek, Kimi), generation event bus, session event log, and YAML profiles.
+- Visual element preferences that plan chart, image, and table usage into the outline up front.
 - HTML and rendered-page harnesses for structure, typography, clipping, overflow, overlap, canvas, and font contracts.
 - Deck-level review for palette, titles, margins, density, layout rhythm, and web-dashboard patterns.
 - Narrative review for process leakage, repetition, slide responsibilities, evidence interpretation, openings, and conclusions.
@@ -48,10 +52,10 @@ pnpm test -- tests/unit/path/to/test.test.ts
 
 ## Updates
 
-Amy-PPT uses its own update manifest. The current version is `1.0.3`:
+Amy-PPT uses its own update manifest. The current version is `1.0.4`:
 
 ```text
-https://raw.githubusercontent.com/296711867/Amy-PPT/main/version.json
+https://raw.githubusercontent.com/296711867/Amy-PPT-Agent/main/version.json
 ```
 
 Override it for private or self-hosted releases with `AMY_PPT_UPDATE_MANIFEST_URL`.

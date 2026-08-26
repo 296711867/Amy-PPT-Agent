@@ -3,28 +3,21 @@
 ## Current Release
 
 - Product: Amy-PPT
-- Development version: `1.0.3`
-- Published update manifest: `1.0.3`
-- Repository: `https://github.com/296711867/Amy-PPT`
+- Development version: `1.0.4`
+- Published update manifest: `1.0.4`
+- Repository: `https://github.com/296711867/Amy-PPT-Agent`
 - Stack: Electron 39, React 19, TypeScript, LangChain/Deep Agents, libSQL/Drizzle, Vitest
 
 ## Completed
 
-- Amy-PPT product identity, logo, application icons, README assets, and the `1.0.3` release metadata.
-- Multiple UI themes with Warm Apricot Coral as the default.
-- Editable Layout Rules and expert Markdown layout configuration.
-- Universal layout catalog with 39 presentation compositions:
-  - 1-6 section text layouts with multiple silhouettes.
-  - Left/right image and text compositions.
-  - 2, 3, 4, and 6-image gallery compositions.
-- Agent planning contract that assigns `layoutId` and rotates repeated adjacent silhouettes.
-- Per-slot placeholder or opt-in AI image generation with partial fallback.
-- Persisted layout and image-slot recovery for generation, retry, template, edit, and style-switch flows.
-- Generation harnesses, pause/retry recovery, source-document planning, deck visual review, and narrative review.
-- Electron IPC, navigation, WebView, and stored-credential security boundaries.
-- Staged export output with runtime compatibility refresh and failure cleanup.
-- CI checks for focused engineering health: node/web type checking and unit tests.
-- Quick-start documentation with current product screenshots and first-run guidance.
+- All `1.0.3` milestones: GLM compatibility, rate-limit backoff, image-placeholder mode, theme rollout, and the reusable release publishing flow.
+- Plugin-oriented runtime: model provider registry with seven builtin providers (DeepSeek and Kimi included), typed generation event bus, append-only session event log, and YAML profiles.
+- Layout-asset system: builtin layouts, enterprise PPTX template harvesting with logo/header/footer filtering, slot parametrization, and deterministic locked-layout filling with structured content packages (`value` / `unit` / `priority`).
+- Per-page layout control panel: module-count, palette, focus, and layout switching without AI round-trips.
+- Visual element preferences for chart, image, and table planning in the outline.
+- Workflow performance work: shared prompt-rule deduplication, non-blocking visual review, parallel background generation, preflight spec gate, and asset-integrity validation.
+- Resilience: 503/502 mapped into the shared rate-limit backoff class, plus the layout-library write-recursion hotfix.
+- Full project context, architecture map, and release SOP are documented in [HANDOFF.md](./HANDOFF.md).
 
 ## Verification Policy
 
@@ -38,5 +31,4 @@
 - Collect real-deck evaluation results to tune layout routing and density budgets.
 - Expand image prompt planning from generic slot subjects to explicit per-slot visual briefs.
 - Supply licensed per-platform ffmpeg binaries when bundled MP4 export is required.
-- Add Windows signing and macOS signing/notarization to the release process.
-- Add packaged-app installation, upgrade, native-module, and ffmpeg verification.
+- If in-app auto-update is ever needed, wire up `electron-updater` in the main process and publish `latest.yml` plus `.blockmap` alongside each release.
