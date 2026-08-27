@@ -9,6 +9,23 @@ describe('page method signal classification', () => {
     expect(signal?.fix).toContain('padding')
   })
 
+  it('classifies font-below-floor rejections with a font floor fix', () => {
+    const signal = classifyPageMethodSignal(
+      '质量校验未通过 (page-9)：- [font-below-floor] <span class="text-[14px]"> 显式字号 14px，低于当前画布正文下限 18px'
+    )
+    expect(signal?.signalClass).toBe('harness-quality')
+    expect(signal?.fix).toContain('18px')
+    expect(signal?.fix).toContain('12px')
+    expect(signal?.fix).toContain('data-ppt-text-role="auxiliary"')
+  })
+
+  it('prefers the harness-quality signal over page-not-written when the rejection reason is preserved', () => {
+    const signal = classifyPageMethodSignal(
+      '页面未写入 (page-1)：模型没有成功调用 update_single_page_file 写入目标 page 文件。 最近一次写盘被质量校验拒绝，必须修正下列问题后重新调用写盘工具：验证失败 page-1: font-below-floor: 显式字号 14px，低于当前画布正文下限 18px'
+    )
+    expect(signal?.signalClass).toBe('harness-quality')
+  })
+
   it('classifies template skeleton drops, chart misuse, and missing writes', () => {
     expect(
       classifyPageMethodSignal('模板骨架资源丢失 (page-2)：bg-texture.png, decor-1.png')?.signalClass

@@ -12,10 +12,10 @@ export interface PageMethodSignal {
 
 const SIGNAL_RULES: Array<{ re: RegExp; signal: PageMethodSignal }> = [
   {
-    re: /质量校验未通过|harness-quality|emoji-as-icon|padding-below-floor|unknown-icon-id/i,
+    re: /质量校验未通过|harness-quality|emoji-as-icon|padding-below-floor|font-below-floor|unknown-icon-id/i,
     signal: {
       signalClass: 'harness-quality',
-      fix: 'Icons must be referenced as <svg data-icon="id"> (never emoji, never hand-written paths), and horizontal padding of the content root must meet the canvas floor (px-24+ on 1600px-wide canvases; no px-10/px-12/px-16/px-20).'
+      fix: 'Icons must be referenced as <svg data-icon="id"> (never emoji, never hand-written paths), horizontal padding of the content root must meet the canvas floor (px-24+ on 1600px-wide canvases; no px-10/px-12/px-16/px-20), and every explicit font size (text-[Npx] or Tailwind size utilities) must respect the canvas floor — body text ≥18px and headings ≥24px on 1600×900, scaled by canvas height otherwise; auxiliary small text (footer/annotation/source) must live inside footer/small/figcaption or carry data-ppt-text-role="auxiliary" and stay ≥12px.'
     }
   },
   {

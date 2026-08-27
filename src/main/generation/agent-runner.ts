@@ -75,6 +75,10 @@ import { readSessionLayoutLibrary } from '../session/master-service'
 import { classifyGenerationError, type GenerationFailureInfo } from '@shared/generation-error'
 import { createGenerationCircuitBreaker } from '@shared/generation-circuit-breaker'
 import { hasCommittedGeneratedPage } from './page-commit'
+import {
+  buildPageNotWrittenMessage,
+  extractWriteValidationFailure
+} from './page-write-failure'
 import { validateAssignedDeckBackground } from './deck-backgrounds'
 import {
   describeTemplatePageRole,
@@ -1505,6 +1509,7 @@ export const runDeepAgentDeckGeneration = async (args: {
       // Final user-facing generation replies are built later from validated page facts.
       // Raw messages may be token deltas, tool-call turns, or cumulative provider chunks.
       let streamError: unknown = null
+      let lastWriteValidationFailure = ''
       try {
         await processAgentStreamCore(stream, {
           emit: args.emit,
@@ -1516,6 +1521,8 @@ export const runDeepAgentDeckGeneration = async (args: {
           sessionId: args.sessionId,
           workerLabel,
           onCustom: (custom) => {
+            const writeValidationFailure = extractWriteValidationFailure(custom)
+            if (writeValidationFailure) lastWriteValidationFailure = writeValidationFailure
             const mappedPageProgress = resolvePageProgressFromCustomStatus(custom)
             const normalizedLabel = progressLabel(args.appLocale, custom.label)
             const normalizedDetail =
@@ -1557,10 +1564,11 @@ export const runDeepAgentDeckGeneration = async (args: {
       if (streamError && !pageCommitted) throw streamError
       if (!pageCommitted) {
         throw new Error(
-          [
-            `页面未写入 (${page.pageId})：模型没有成功调用 ${writeToolName} 写入目标 page 文件。`,
-            `必须调用 ${writeToolName}(pageId="${page.pageId}", content=完整创意页面片段)，不要只在最终回复里描述 HTML。`
-          ].join(' ')
+          buildPageNotWrittenMessage({
+            pageId: page.pageId,
+            writeToolName,
+            lastWriteValidationFailure
+          })
         )
       }
 
