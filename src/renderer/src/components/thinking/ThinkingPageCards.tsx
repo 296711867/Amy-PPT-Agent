@@ -6,6 +6,7 @@ import type { ThinkingStage } from '@shared/thinking'
 import {
   CheckCircle2,
   FileText,
+  LayoutGrid,
   LayoutList,
   Loader2,
   Pencil,
@@ -14,6 +15,14 @@ import {
   X
 } from 'lucide-react'
 import { Input, Textarea } from '../ui/Input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '../ui/Dialog'
 
 interface PageCard {
   pageNumber: number
@@ -31,11 +40,14 @@ interface PageCardDraft {
   keyPoints: string
 }
 
+type PageOutlineLayout = 'list' | 'grid'
+
 interface ThinkingPageCardsProps {
   thinkingMd: string
   stage: ThinkingStage
   onConfirmGenerate: () => void
   loading: boolean
+  onOutlineLayoutChange?: (layout: PageOutlineLayout) => void
 }
 
 function parsePageCards(thinkingMd: string): PageCard[] {
@@ -104,12 +116,14 @@ export function ThinkingPageCards({
   thinkingMd,
   stage,
   onConfirmGenerate,
-  loading
+  loading,
+  onOutlineLayoutChange
 }: ThinkingPageCardsProps): ReactElement {
   const t = useT()
   const updatePageOutline = useThinkingStore((state) => state.updatePageOutline)
   const { success, error: toastError } = useToastStore()
   const [viewMode, setViewMode] = useState<'outline' | 'document'>('outline')
+  const [outlineLayout, setOutlineLayout] = useState<PageOutlineLayout>('list')
   const [editingPageNumber, setEditingPageNumber] = useState<number | null>(null)
   const [savingPageNumber, setSavingPageNumber] = useState<number | null>(null)
   const [draft, setDraft] = useState<PageCardDraft | null>(null)
@@ -118,6 +132,13 @@ export function ThinkingPageCards({
   const canGenerate = cards.length > 0 && stage !== 'collect'
   const hasDocument = thinkingMd.trim().length > 0
   const busy = loading || savingPageNumber !== null
+  const editingCard = cards.find((card) => card.pageNumber === editingPageNumber) ?? null
+
+  const changeOutlineLayout = (layout: PageOutlineLayout): void => {
+    if (busy || editingPageNumber !== null || layout === outlineLayout) return
+    setOutlineLayout(layout)
+    onOutlineLayoutChange?.(layout)
+  }
 
   const startEditing = (card: PageCard): void => {
     if (busy) return
@@ -194,31 +215,63 @@ export function ThinkingPageCards({
             {t(STAGE_I18N_KEYS[stage] as Parameters<typeof t>[0])}
           </span>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-1 rounded-full border border-[var(--ui-border-strong)] bg-[var(--ui-surface-inset)]/70 p-1">
-          <button
-            type="button"
-            onClick={() => setViewMode('outline')}
-            className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[11px] font-semibold transition-colors ${
-              viewMode === 'outline'
-                ? 'bg-[var(--ui-surface-elevated)] text-foreground shadow-sm'
-                : 'text-primary hover:bg-[var(--ui-surface-elevated)]/60'
-            }`}
-          >
-            <LayoutList className="h-3.5 w-3.5" />
-            {t('thinking.outlineView')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('document')}
-            className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[11px] font-semibold transition-colors ${
-              viewMode === 'document'
-                ? 'bg-[var(--ui-surface-elevated)] text-foreground shadow-sm'
-                : 'text-primary hover:bg-[var(--ui-surface-elevated)]/60'
-            }`}
-          >
-            <FileText className="h-3.5 w-3.5" />
-            thinking.md
-          </button>
+        <div className="mt-4 flex items-center gap-2">
+          <div className="grid flex-1 grid-cols-2 gap-1 rounded-full border border-[var(--ui-border-strong)] bg-[var(--ui-surface-inset)]/70 p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('outline')}
+              className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[11px] font-semibold transition-colors ${
+                viewMode === 'outline'
+                  ? 'bg-[var(--ui-surface-elevated)] text-foreground shadow-sm'
+                  : 'text-primary hover:bg-[var(--ui-surface-elevated)]/60'
+              }`}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              {t('thinking.outlineView')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('document')}
+              className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[11px] font-semibold transition-colors ${
+                viewMode === 'document'
+                  ? 'bg-[var(--ui-surface-elevated)] text-foreground shadow-sm'
+                  : 'text-primary hover:bg-[var(--ui-surface-elevated)]/60'
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              thinking.md
+            </button>
+          </div>
+          {viewMode === 'outline' && (
+            <div className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--ui-border-strong)] bg-[var(--ui-surface-inset)]/70 p-1">
+              <button
+                type="button"
+                onClick={() => changeOutlineLayout('list')}
+                disabled={busy || editingPageNumber !== null}
+                className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  outlineLayout === 'list'
+                    ? 'bg-[var(--ui-surface-elevated)] text-foreground shadow-sm'
+                    : 'text-primary hover:bg-[var(--ui-surface-elevated)]/60'
+                }`}
+                title={t('thinking.outlineListView')}
+              >
+                <LayoutList className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => changeOutlineLayout('grid')}
+                disabled={busy || editingPageNumber !== null}
+                className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  outlineLayout === 'grid'
+                    ? 'bg-[var(--ui-surface-elevated)] text-foreground shadow-sm'
+                    : 'text-primary hover:bg-[var(--ui-surface-elevated)]/60'
+                }`}
+                title={t('thinking.outlineGridView')}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -303,6 +356,61 @@ export function ThinkingPageCards({
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
               {t('thinking.noPagesYet')}
             </p>
+          </div>
+        ) : outlineLayout === 'grid' ? (
+          <div className="grid grid-cols-3 gap-2">
+            {cards.map((card) => {
+              const isCover = card.role.toUpperCase().includes('COVER')
+              return (
+                <div key={card.pageNumber} className="group min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => startEditing(card)}
+                    disabled={busy || editingPageNumber !== null}
+                    className="flex aspect-video w-full min-w-0 flex-col rounded-xl border border-[var(--ui-border-strong)] bg-background p-2 text-left shadow-sm transition-colors hover:border-[var(--ui-focus)] hover:shadow disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--ui-focus)] text-[8px] font-bold text-foreground">
+                      {card.pageNumber}
+                    </span>
+                    {isCover ? (
+                      <span className="line-clamp-3 flex flex-1 items-center justify-center self-stretch px-1.5 text-center text-[11px] font-semibold leading-tight text-foreground">
+                        {card.title}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="mt-1 line-clamp-2 break-words text-[11px] font-semibold leading-tight text-foreground">
+                          {card.title}
+                        </span>
+                        {card.keyPoints.length > 0 && (
+                          <ul className="mt-1 min-h-0 flex-1 space-y-0.5 overflow-hidden text-[9px] leading-tight text-muted-foreground">
+                            {card.keyPoints.slice(0, 2).map((point, pointIndex) => (
+                              <li key={pointIndex} className="flex gap-1">
+                                <span className="mt-[0.4em] h-0.5 w-0.5 shrink-0 rounded-full bg-[var(--ui-focus)]" />
+                                <span className="line-clamp-1 break-words">{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    )}
+                  </button>
+                  <div className="mt-1 flex items-center justify-between gap-1 px-0.5">
+                    <span className="truncate rounded-full border border-[var(--ui-border-strong)] bg-[var(--ui-surface-elevated)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-primary">
+                      {card.role}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => startEditing(card)}
+                      disabled={busy || editingPageNumber !== null}
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-70 transition-colors hover:bg-[var(--ui-surface-inset)] hover:text-foreground hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
+                      title={t('thinking.editOutline')}
+                    >
+                      <Pencil className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="space-y-2.5">
@@ -479,6 +587,109 @@ export function ThinkingPageCards({
           </p>
         )}
       </div>
+
+      <Dialog
+        open={outlineLayout === 'grid' && editingPageNumber !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelEditing()
+        }}
+      >
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {t('thinking.editPageOutlineTitle', { page: editingPageNumber ?? '' })}
+            </DialogTitle>
+            <DialogDescription className="sr-only">{t('thinking.editOutline')}</DialogDescription>
+          </DialogHeader>
+          {draft && (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-semibold text-primary">
+                  {t('thinking.outlineTitle')}
+                </span>
+                <Input
+                  value={draft.title}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current ? { ...current, title: event.target.value } : current
+                    )
+                  }
+                  className="h-8 rounded-lg border-[var(--ui-border-strong)] bg-[var(--ui-surface-elevated)] px-2.5 text-[12px]"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-semibold text-primary">
+                  {t('thinking.outlineObjective')}
+                </span>
+                <Textarea
+                  value={draft.objective}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current ? { ...current, objective: event.target.value } : current
+                    )
+                  }
+                  rows={2}
+                  className="min-h-14 resize-y rounded-lg border-[var(--ui-border-strong)] bg-[var(--ui-surface-elevated)] px-2.5 py-2 text-[12px]"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-semibold text-primary">
+                  {t('thinking.outlineSummary')}
+                </span>
+                <Textarea
+                  value={draft.summary}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current ? { ...current, summary: event.target.value } : current
+                    )
+                  }
+                  rows={3}
+                  className="min-h-20 resize-y rounded-lg border-[var(--ui-border-strong)] bg-[var(--ui-surface-elevated)] px-2.5 py-2 text-[12px]"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-semibold text-primary">
+                  {t('thinking.outlineKeyPoints')}
+                </span>
+                <Textarea
+                  value={draft.keyPoints}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current ? { ...current, keyPoints: event.target.value } : current
+                    )
+                  }
+                  rows={4}
+                  placeholder={t('thinking.outlineKeyPointsHint')}
+                  className="min-h-24 resize-y rounded-lg border-[var(--ui-border-strong)] bg-[var(--ui-surface-elevated)] px-2.5 py-2 text-[12px]"
+                />
+              </label>
+            </div>
+          )}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={cancelEditing}
+              disabled={savingPageNumber !== null}
+              className="h-9 rounded-full border border-[var(--ui-border-strong)] px-4 text-[12px] font-semibold text-primary transition-colors hover:bg-[var(--ui-surface-elevated)] disabled:opacity-40"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={() => editingCard && void savePage(editingCard)}
+              disabled={savingPageNumber !== null}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-[var(--ui-action-hover)] disabled:opacity-50"
+            >
+              {savingPageNumber === editingPageNumber ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {t('thinking.saveOutline')}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

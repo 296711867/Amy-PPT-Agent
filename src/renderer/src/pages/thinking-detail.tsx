@@ -349,6 +349,7 @@ export function ThinkingDetailPage(): ReactElement {
     return [buildWelcomeMessage(t)]
   }, [messages, restoredContextMessage, loading, t])
   const showOutlinePanel = Boolean(thinkingId) && stage !== 'collect'
+  const [outlineGrid, setOutlineGrid] = useState(false)
   const dateFormatter = new Intl.DateTimeFormat(lang === 'zh' ? 'zh-CN' : 'en-US', {
     month: '2-digit',
     day: '2-digit',
@@ -507,7 +508,11 @@ export function ThinkingDetailPage(): ReactElement {
 
       <div
         className={`relative grid min-h-0 flex-1 gap-4 p-4 ${
-          showOutlinePanel ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : 'grid-cols-1'
+          showOutlinePanel
+            ? outlineGrid
+              ? 'lg:grid-cols-[minmax(0,1fr)_640px]'
+              : 'lg:grid-cols-[minmax(0,1fr)_360px]'
+            : 'grid-cols-1'
         }`}
       >
         <section className="min-h-0 overflow-hidden rounded-[2rem] border border-border bg-[var(--ui-surface-elevated)] shadow-[0_14px_34px_rgb(var(--ui-shadow-color)/0.12)]">
@@ -571,6 +576,7 @@ export function ThinkingDetailPage(): ReactElement {
               stage={stage}
               onConfirmGenerate={() => void handleConfirmGenerate()}
               loading={loading || generating}
+              onOutlineLayoutChange={(layout) => setOutlineGrid(layout === 'grid')}
             />
           </aside>
         )}
