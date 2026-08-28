@@ -1,5 +1,5 @@
 import log from 'electron-log/main.js'
-import type { SessionJobKind } from '../db/database'
+import type { SessionJobKind } from '../db/records'
 import type { FinalizeContext } from './types'
 import type { GenerationContext } from './context'
 import {

@@ -1,5 +1,14 @@
 # Amy-PPT Changelog
 
+## Unreleased
+
+- Added a card-grid view to the thinking page-outline panel: list/grid toggle, 16:9 slide-style placeholder cards (three per row, panel auto-widens), and dialog-based per-page outline editing.
+- Fixed a generation retry dead loop: when a page write was rejected by quality validation (e.g. `font-below-floor`) and the model never re-called the write tool, the outer "page not written" error now preserves the last validation details, and retry prompts teach the explicit font-size fixes (canvas floors, auxiliary-text marking) instead of looping until retries are exhausted.
+- Unified the title band across generated decks: reversed the three "vary title position" instructions (system prompt, layout skill, expert profile), promoted the title band to a deck-level hard contract, and upgraded `deck-title-anchor-drift` to an error-level check that also compares title font sizes against the deck median.
+- Raised presentation-scale typography and icon defaults on the 1600×900 canvas: body 20→24px, module title 24→28px, slide subtitle 26→28px, slide title 40→48px (aligned with the runtime 48px title clamp), emphasis 52→56px, icon backing 52→64px, and card padding 24→32px; the composition profile now requires cutting copy before shrinking type when the height budget is exceeded.
+- Split the oversized core files into maintainable modules with no behavior change: `db/database.ts` (3758→2767 lines) now delegates to `db/records.ts` (row/union types), seven `db/repositories/*` classes, and `db/services/*`; `generation/agent-runner.ts` (2595→1800 lines) extracted `generation/planning/*` (deck/page planners, design-contract builder, model JSON parsing) and `agent-stream-processor.ts`; `pages/session-detail.tsx` (1894→1270 lines) moved its UI and logic into `components/session-detail/*` (98 files: `hooks/`, `ai-panel/`, `workspace/`, `preview/`, `sidebar/`, `modal/`, etc.); `PreviewIframe`/`HtmlEditorCanvas` share the new `components/presentation-webview/*` runtime helpers.
+- Realigned regression tests with the refactored layout: source-contract assertions now read the new module paths (`db/records.ts`, `useSessionGenerationEvents.ts`, `presentation-webview/webview-utils.ts`), layout-profile expectations follow the raised typography defaults, the update-manifest URL follows the renamed `Amy-PPT-Agent` repository, and the symlink-escape test self-skips on Windows without symlink privilege.
+
 ## 1.0.4 - 2026-08-27
 
 - Added the plugin-oriented architecture: model provider registry (DeepSeek and Kimi included), typed generation event bus, append-only session event log, and YAML profiles.

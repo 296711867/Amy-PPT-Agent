@@ -59,4 +59,62 @@ describe('thumbnail database recovery', () => {
     },
     30_000
   )
+
+  it('upserts by resource variant and batches normalized resource ids', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ohmyppt-thumbnail-db-'))
+    roots.push(root)
+    const { PPTDatabase } = await import('../../../src/main/db/database')
+    const db = new PPTDatabase(path.join(root, 'test.db'))
+    await db.init()
+    try {
+      await db.upsertThumbnailRecord({
+        resourceType: 'style',
+        resourceId: 'style-1',
+        variant: 'default',
+        sourcePath: '/styles/style-1.html',
+        sourceMtimeMs: 1,
+        signature: 'old-signature',
+        thumbnailPath: '',
+        status: 'queued'
+      })
+      await db.upsertThumbnailRecord({
+        resourceType: 'style',
+        resourceId: 'style-1',
+        variant: 'default',
+        sourcePath: '/styles/style-1.html',
+        sourceMtimeMs: 2,
+        signature: 'new-signature',
+        thumbnailPath: '/thumbs/style-1.png',
+        status: 'completed'
+      })
+      await db.upsertThumbnailRecord({
+        resourceType: 'style',
+        resourceId: 'style-1',
+        variant: 'wide',
+        sourcePath: '/styles/style-1.html',
+        sourceMtimeMs: 2,
+        signature: 'wide-signature',
+        thumbnailPath: '/thumbs/style-1-wide.png',
+        status: 'completed'
+      })
+
+      await expect(
+        db.getThumbnailRecords('style', ['style-1', ' style-1 ', '', 'missing'])
+      ).resolves.toEqual([
+        expect.objectContaining({
+          resourceId: 'style-1',
+          variant: 'default',
+          signature: 'new-signature',
+          thumbnailPath: '/thumbs/style-1.png',
+          status: 'completed'
+        })
+      ])
+      await expect(db.getThumbnailRecord('style', 'style-1', 'wide')).resolves.toMatchObject({
+        signature: 'wide-signature'
+      })
+      await expect(db.getThumbnailRecords('style', [])).resolves.toEqual([])
+    } finally {
+      await db.close()
+    }
+  })
 })

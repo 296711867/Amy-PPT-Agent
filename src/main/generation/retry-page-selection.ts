@@ -1,4 +1,4 @@
-import type { GenerationPageRecord, SessionPageRecord } from '../db/database'
+import type { GenerationPageRecord, SessionPageRecord } from '../db/records'
 
 export function selectRetrySessionPages(args: {
   sessionPages: SessionPageRecord[]

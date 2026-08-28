@@ -1,4 +1,4 @@
-import type { SessionStyleSnapshotInput } from '../db/database'
+import type { SessionStyleSnapshotInput } from '../db/records'
 
 export interface AiStyleSelection {
   mode: 'ai'

@@ -181,15 +181,17 @@ describe('source-grounded prompt rules', () => {
 
   it('preserves chat messages when generation is cancelled', () => {
     const sessionStore = readSource('src/renderer/src/store/sessionStore.ts')
-    const sessionDetail = readSource('src/renderer/src/pages/session-detail.tsx')
+    const generationEvents = readSource(
+      'src/renderer/src/components/session-detail/hooks/useSessionGenerationEvents.ts'
+    )
     const loadSessionSource = sessionStore.slice(
       sessionStore.indexOf('loadSession: async'),
       sessionStore.indexOf('loadMessages: async')
     )
 
     expect(loadSessionSource).not.toContain('currentMessages: []')
-    expect(sessionDetail).toContain('if (payload.cancelled)')
-    expect(sessionDetail).toContain('cancelGeneration(payload.message)')
+    expect(generationEvents).toContain('if (payload.cancelled)')
+    expect(generationEvents).toContain('cancelGeneration(payload.message)')
   })
 
   it('keeps concurrent deck-page progress on the active page instead of resetting to understanding', () => {
@@ -251,11 +253,13 @@ describe('source-grounded prompt rules', () => {
 
   it('publishes durable batch page results without stealing preview focus or duplicating summaries', () => {
     const sharedGeneration = readSource('src/shared/generation.ts')
-    const sessionDetail = readSource('src/renderer/src/pages/session-detail.tsx')
+    const generationEvents = readSource(
+      'src/renderer/src/components/session-detail/hooks/useSessionGenerationEvents.ts'
+    )
     const batchEditFlow = readSource('src/main/generation/edit-deck-allpage-flow.ts')
 
     expect(sharedGeneration).toContain('focusPage?: boolean')
-    expect(sessionDetail).toContain('if (payload.focusPage !== false)')
+    expect(generationEvents).toContain('if (payload.focusPage !== false)')
     expect(batchEditFlow).toContain('focusPage: false')
     expect(batchEditFlow).toContain(
       'emitSuccessfulEditSummary(context, fallbackEditSummary, emitAssistant)'
@@ -333,7 +337,7 @@ describe('source-grounded prompt rules', () => {
   })
 
   it('planNewPage includes source document context', () => {
-    const engineGenerate = readSource('src/main/generation/agent-runner.ts')
+    const engineGenerate = readSource('src/main/generation/planning/page-planner.ts')
 
     expect(engineGenerate).toContain('sourceDocumentPaths?: string[]')
     expect(engineGenerate).toContain('Source document context:')
@@ -345,7 +349,7 @@ describe('source-grounded prompt rules', () => {
   })
 
   it('single-slide planning can preserve explicit topic lists', () => {
-    const engineGenerate = readSource('src/main/generation/agent-runner.ts')
+    const engineGenerate = readSource('src/main/generation/planning/page-planner.ts')
     const generationUser = readSource('src/main/agent-runtime/prompt/composers/generation-user.ts')
     const planningComposer = readSource('src/main/agent-runtime/prompt/composers/planning.ts')
     const planningTemplate = readSource(

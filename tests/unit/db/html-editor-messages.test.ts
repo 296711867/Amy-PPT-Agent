@@ -116,4 +116,49 @@ describe('HTML editor message history', () => {
       await db.close()
     }
   })
+
+  it('creates documents with versions and touches the document when appending a version', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ohmyppt-html-editor-versions-'))
+    roots.push(root)
+    const db = new PPTDatabase(path.join(root, 'test.db'))
+    await db.init()
+
+    try {
+      await db.createHtmlEditDocumentWithVersion({
+        document: {
+          id: 'hedit-3',
+          title: 'Versioned Demo',
+          htmlPath: path.join(root, 'current.html'),
+          designWidth: 1280,
+          createdAt: 10,
+          updatedAt: 10
+        },
+        version: {
+          id: 'version-1',
+          commitSha: 'commit-1',
+          message: 'Initial import',
+          createdAt: 10
+        }
+      })
+      await db.createHtmlEditVersionAndTouch({
+        id: 'version-2',
+        docId: 'hedit-3',
+        commitSha: 'commit-2',
+        message: 'Edit title',
+        createdAt: 20
+      })
+
+      await expect(db.listHtmlEditVersions('hedit-3')).resolves.toMatchObject([
+        { id: 'version-2', commitSha: 'commit-2' },
+        { id: 'version-1', commitSha: 'commit-1' }
+      ])
+      await expect(db.getHtmlEditVersion('version-2')).resolves.toMatchObject({
+        docId: 'hedit-3',
+        message: 'Edit title'
+      })
+      await expect(db.getHtmlEditDocument('hedit-3')).resolves.toMatchObject({ updatedAt: 20 })
+    } finally {
+      await db.close()
+    }
+  })
 })

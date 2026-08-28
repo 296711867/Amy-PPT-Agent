@@ -118,4 +118,56 @@ describe('session AI style snapshot persistence', () => {
       await db.close()
     }
   })
+
+  it('copies a custom snapshot over the target session snapshot', async () => {
+    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ohmyppt-ai-style-'))
+    roots.push(root)
+    const db = new PPTDatabase(path.join(root, 'test.db'))
+    await db.init()
+
+    try {
+      const common = {
+        pageCount: 1,
+        slideSizeId: 'wide-16-9' as const,
+        slideWidth: 1600,
+        slideHeight: 900,
+        provider: 'test',
+        model: 'test-model'
+      }
+      const sourceSessionId = await db.createSession({
+        ...common,
+        title: 'Source',
+        styleId: 'ai-copy-source',
+        styleSnapshot: {
+          styleId: 'ai-copy-source',
+          styleKey: 'ai-copy-style',
+          styleName: 'Copied AI style',
+          description: 'high contrast technical field guide',
+          aliases: '["technical","contrast"]',
+          source: 'custom',
+          version: '2.3',
+          styleSkill: 'preserve the custom technical field-guide language'
+        }
+      })
+      const targetSessionId = await db.createSession({
+        ...common,
+        title: 'Target'
+      })
+
+      await db.copySessionStyleSnapshot(sourceSessionId, targetSessionId)
+
+      await expect(db.getSessionStyleSnapshot(targetSessionId)).resolves.toMatchObject({
+        sessionId: targetSessionId,
+        styleId: 'ai-copy-source',
+        styleKey: 'ai-copy-style',
+        description: 'high contrast technical field guide',
+        aliases: '["technical","contrast"]',
+        source: 'custom',
+        version: '2.3.0',
+        styleSkill: 'preserve the custom technical field-guide language'
+      })
+    } finally {
+      await db.close()
+    }
+  })
 })

@@ -3,62 +3,39 @@ import fs from 'fs'
 import pLimit from 'p-limit'
 import log from 'electron-log/main.js'
 import { createSessionDeckAgent, createSessionEditAgent } from '../agent-runtime/agent'
-import { assertModelText, extractJsonBlock, extractModelText, resolveModel } from '../agent-runtime/model'
 import type { GenerationAgentManager, GenerationModelControl } from './context'
-import type { ModelRuntimeConfig } from '../agent-runtime/model'
 import { runWithModelTemperatureControl } from '../agent-runtime/model'
 import {
-  buildDesignContractSystemPrompt,
-  buildDesignContractUserPrompt,
   buildEditUserPrompt,
-  buildPlanningSystemPrompt,
-  buildPlanningUserPrompt,
-  buildSinglePageGenerationPrompt,
-  CONTENT_LANGUAGE_RULES
+  buildSinglePageGenerationPrompt
 } from '../agent-runtime/prompt'
 import type {
   AnimationPreferencesPayload,
   DeckEditScope,
   DesignContract,
-  FontSelection,
   GenerateChunkEvent,
   OutlineItem,
   VisualFormat,
   SelectedElementRuntimeContext
 } from '@shared/generation'
-import { isSectionAgendaOutline, resolvePlannedVisualFormat } from '@shared/generation'
-import { normalizeLayoutIntent, type LayoutIntent } from '@shared/layout-intent'
+import { isSectionAgendaOutline } from '@shared/generation'
 import { formatLayoutMasterPrompt, resolveLayoutMasterTemplate } from '@shared/layout-master'
 import {
-  diversifyUniversalLayoutSequence,
-  formatUniversalLayoutCatalogPrompt,
   formatUniversalLayoutPrompt,
-  normalizeContentDensity,
-  normalizeContentStructure,
-  normalizeUniversalLayoutId,
-  normalizeVisualAspect,
-  resolveUniversalLayoutId,
-  type UniversalLayoutId
+  normalizeUniversalLayoutId
 } from '@shared/universal-layouts'
 import { resolveModelTimeoutMs, type ModelTimeoutProfile } from '@shared/model-timeout'
 import { progressLabel, progressText } from '@shared/progress'
-import type { SlideSizePreset } from '@shared/slide-size'
-import {
-  assertFontFamilyAvailable,
-  buildAvailableFontsForPrompt,
-  type AvailableFont
-} from '../presentation/fonts/font-registry'
 import { sleep } from '../ipc/utils'
 import {
   createReferenceDocumentRetriever,
   formatReferenceDocumentSnippets
 } from './reference-document-retrieval'
-import { logAgentToolEvents } from '../utils/agent-tool-logger'
 import {
-  normalizeAudienceMove,
-  normalizeOutlineEntries,
-  normalizeOutlineText
-} from './outline-normalizer'
+  processAgentStreamCore,
+  type DeckToolStatusChunk
+} from './agent-stream-processor'
+export { planNewPage } from './planning/page-planner'
 import { classifyPageMethodSignal } from './method-signals'
 import {
   MAX_RATE_LIMIT_RETRIES,
@@ -77,8 +54,10 @@ import { createGenerationCircuitBreaker } from '@shared/generation-circuit-break
 import { hasCommittedGeneratedPage } from './page-commit'
 import {
   buildPageNotWrittenMessage,
+  extractHtmlFragmentCandidate,
   extractWriteValidationFailure
 } from './page-write-failure'
+import { persistPageHtmlFromFragment } from '../presentation/html/page-writer-core'
 import { validateAssignedDeckBackground } from './deck-backgrounds'
 import {
   describeTemplatePageRole,
@@ -152,840 +131,9 @@ const modelCallSignal = (
   return upstreamSignal ? AbortSignal.any([timeoutSignal, upstreamSignal]) : timeoutSignal
 }
 
-// ── Shared agent stream processor ───────────────────────────────────────
+export { planDeckWithLLM } from './planning/deck-planner'
 
-interface DeckToolStatusChunk {
-  type?: string
-  label?: string
-  detail?: string
-  progress?: number
-  pageId?: string
-  agentName?: string
-}
-
-interface StreamProcessOptions {
-  emit?: (chunk: GenerateChunkEvent) => void
-  runId: string
-  stage: string
-  totalPages: number
-  provider: string
-  model: string
-  sessionId: string
-  workerLabel?: string
-  /**
-   * Called for each `deck_tool_status` custom chunk.
-   * Return `true` to break the stream loop (e.g. all pages written).
-   */
-  onCustom?: (custom: DeckToolStatusChunk) => boolean | void
-  /** Called when `updates.model` is detected — the model is actively thinking. */
-  onModelThinking?: (defaultProgress: number) => void
-}
-
-async function processAgentStreamCore(
-  stream: AsyncIterable<unknown>,
-  options: StreamProcessOptions
-): Promise<void> {
-  const { sessionId, workerLabel, onCustom, onModelThinking } = options
-  let firstChunkLogged = false
-  const seenToolEvents = new Set<string>()
-
-  for await (const chunk of stream) {
-    if (!firstChunkLogged) {
-      firstChunkLogged = true
-      log.info('[deepagent] stream first chunk', { sessionId, worker: workerLabel })
-    }
-    if (!Array.isArray(chunk) || chunk.length < 3) continue
-    const parts = chunk as unknown[]
-    const mode = parts[1] as string
-    const data = parts[2]
-
-    if (mode === 'updates') {
-      logAgentToolEvents(data, seenToolEvents, { tag: 'deepagent', source: 'updates' })
-    } else if (mode === 'messages') {
-      logAgentToolEvents(data, seenToolEvents, { tag: 'deepagent', source: 'messages' })
-    }
-
-    if (mode === 'custom' && data && typeof data === 'object') {
-      const custom = data as DeckToolStatusChunk
-      if (custom.type === 'deck_tool_status' && custom.label) {
-        const shouldBreak = onCustom?.(custom)
-        if (shouldBreak) break
-      }
-      continue
-    }
-
-    if (mode === 'updates' && data && typeof data === 'object') {
-      const updates = data as Record<string, unknown>
-      if (updates.model) {
-        onModelThinking?.(42)
-      }
-      continue
-    }
-  }
-}
-
-const normalizeDesignContract = (value: unknown): DesignContract => {
-  const record =
-    value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {}
-  const readText = (key: keyof Omit<DesignContract, 'palette'>): string => {
-    const text = String(record[key] ?? '')
-      .replace(/\s+/g, ' ')
-      .trim()
-    return text.length > 220 ? `${text.slice(0, 220).trimEnd()}…` : text
-  }
-  const paletteRaw = Array.isArray(record.palette) ? record.palette : []
-  const palette = paletteRaw
-    .map((item) => String(item ?? '').trim())
-    .filter((item) => item.length > 0)
-    .slice(0, 6)
-  return {
-    theme: readText('theme'),
-    background: readText('background'),
-    palette,
-    titleStyle: readText('titleStyle'),
-    layoutMotif: readText('layoutMotif'),
-    chartStyle: readText('chartStyle'),
-    shapeLanguage: readText('shapeLanguage'),
-    titleFont: readText('titleFont'),
-    subtitleFont: readText('subtitleFont') || readText('bodyFont'),
-    bodyFont: readText('bodyFont')
-  }
-}
-
-const unwrapJsonLikeString = (value: string): string => {
-  const source = value.trim()
-  if (source.length < 2 || !source.startsWith('"') || !source.endsWith('"')) {
-    return source
-  }
-  const inner = source
-    .slice(1, -1)
-    .replace(/\\"/g, '"')
-    .replace(/\\n/g, '\n')
-    .replace(/\\r/g, '\r')
-    .replace(/\\t/g, '\t')
-    .trim()
-  return inner.startsWith('{') || inner.startsWith('[') || inner.startsWith('```') ? inner : source
-}
-
-const parseModelJson = (responseText: string, appLocale?: AppLocale): unknown => {
-  let source = responseText.trim()
-  let lastError: unknown
-
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const candidates = Array.from(new Set([source, extractJsonBlock(source)]))
-    let decodedJsonString = false
-
-    for (const candidate of candidates) {
-      try {
-        const parsed = JSON.parse(candidate) as unknown
-        if (typeof parsed !== 'string') {
-          return parsed
-        }
-        source = parsed.trim()
-        lastError = null
-        decodedJsonString = true
-        break
-      } catch (err) {
-        lastError = err
-      }
-    }
-
-    if (decodedJsonString) {
-      continue
-    }
-
-    const unwrapped = unwrapJsonLikeString(source)
-    if (unwrapped !== source) {
-      source = unwrapped
-      continue
-    }
-
-    const block = extractJsonBlock(source)
-    if (block !== source) {
-      source = block
-      continue
-    }
-
-    break
-  }
-
-  const preview = source.length > 200 ? `${source.slice(0, 200)}…` : source
-  throw new Error(
-    uiText(
-      appLocale,
-      `LLM 返回的 JSON 解析失败: ${lastError instanceof Error ? lastError.message : String(lastError)}. 原始文本预览: ${preview}`,
-      `Failed to parse JSON returned by the LLM: ${lastError instanceof Error ? lastError.message : String(lastError)}. Raw text preview: ${preview}`
-    )
-  )
-}
-
-const buildPlanningRetryUserPrompt = (
-  userPrompt: string,
-  totalPages: number,
-  previousError: string
-): string =>
-  [
-    userPrompt,
-    '',
-    'Planning retry requirement:',
-    `- The previous planning response failed validation: ${previousError}`,
-    `- Retry now and return exactly ${totalPages} items.`,
-    '- Return only a raw JSON array. Do not wrap it in Markdown. Do not add explanations.',
-    '- Each item must have exactly these fields: title, keyPoints, layoutIntent, contentStructure, moduleCount, visualAspect, contentDensity, layoutId.',
-    '- layoutId must be a universal layout catalog ID or null.',
-    '- keyPoints must be an array with 1-10 short strings.'
-  ].join('\n')
-
-const buildDesignContractRetryUserPrompt = (userPrompt: string, previousError: string): string =>
-  [
-    userPrompt,
-    '',
-    'Design contract retry requirement:',
-    `- The previous design contract response failed validation: ${previousError}`,
-    '- Retry now and return only a raw JSON object. Do not wrap it in Markdown. Do not add explanations.',
-    '- Use exactly these fields: theme, background, palette, titleStyle, layoutMotif, chartStyle, shapeLanguage, titleFont, bodyFont.',
-    '- palette must be an array with 3-6 color strings.',
-    '- titleFont and bodyFont must be exact family values from availableFonts in the original system prompt.',
-    '- titleStyle must follow explicit typography targets in the original style specification when supplied. Otherwise use text-4xl or text-5xl. Do not exceed 88px unless the user explicitly requested oversized typography.'
-  ].join('\n')
-
-const detectFontLanguageHint = (text: string): string => {
-  if (/[\u3400-\u9fff]/.test(text)) return 'cjk'
-  return 'latin'
-}
-
-const resolveFontPair = (
-  value: FontSelection | undefined
-): { titleFont: string; subtitleFont: string; bodyFont: string } | null => {
-  if (!value || value.mode !== 'pair') return null
-  const titleFont = String(value.title?.family || '').trim()
-  const bodyFont = String(value.body?.family || '').trim()
-  const subtitleFont = String(value.subtitle?.family || bodyFont).trim()
-  return titleFont && subtitleFont && bodyFont ? { titleFont, subtitleFont, bodyFont } : null
-}
-
-export const planDeckWithLLM = async (args: {
-  provider: string
-  apiKey: string
-  model: string
-  baseUrl: string
-  temperature?: number
-  maxTokens?: number
-  modelRuntime?: ModelRuntimeConfig
-  modelControl?: GenerationModelControl
-  styleId: string | null | undefined
-  totalPages: number
-  appLocale?: AppLocale
-  modelTimeoutMs?: number
-  topic: string
-  userMessage: string
-  sourceDocumentPaths?: string[]
-  hasSourceMaterials?: boolean
-  visualElementPreferences?: import('@shared/generation').VisualElementPreferences
-  emit?: (chunk: GenerateChunkEvent) => void
-  runId?: string
-  signal?: AbortSignal
-}): Promise<OutlineItem[]> => {
-  const client = withModelControl(args.modelControl, () =>
-    resolveModel(
-      args.provider,
-      args.apiKey,
-      args.model,
-      args.baseUrl,
-      args.temperature,
-      args.maxTokens,
-      args.modelRuntime
-    )
-  )
-  const systemPrompt = buildPlanningSystemPrompt(args.totalPages)
-  const userPrompt = buildPlanningUserPrompt({
-    topic: args.topic,
-    totalPages: args.totalPages,
-    userMessage: args.userMessage,
-    hasSourceMaterials: args.hasSourceMaterials || Boolean(args.sourceDocumentPaths?.length),
-    visualElementPreferences: args.visualElementPreferences
-  })
-  const parsePlanningItems = (responseText: string): OutlineItem[] => {
-    const parsed = parseModelJson(responseText, args.appLocale)
-    if (!Array.isArray(parsed)) {
-      throw new Error(
-        uiText(
-          args.appLocale,
-          'LLM plan_deck 返回格式不正确，期望 [{title, keyPoints[], layoutIntent}] 数组。',
-          'LLM plan_deck returned an invalid format; expected an array like [{ title, keyPoints[], layoutIntent }].'
-        )
-      )
-    }
-    if (parsed.length === 0 || typeof parsed[0] !== 'object' || parsed[0] === null) {
-      throw new Error(
-        uiText(
-          args.appLocale,
-          'LLM plan_deck pages 返回格式不正确，期望 [{title, keyPoints[], layoutIntent}] 数组。',
-          'LLM plan_deck pages returned an invalid format; expected an array like [{ title, keyPoints[], layoutIntent }].'
-        )
-      )
-    }
-    const items: OutlineItem[] = (parsed as Array<Record<string, unknown>>).map((item, index) => {
-      const title = String(item.title ?? '').trim()
-      const structuredEntries = normalizeOutlineEntries(item.keyPoints)
-      const keyPoints = structuredEntries.map((entry) => entry.label)
-      const requestedModuleCount = Number(item.moduleCount)
-      const moduleCount = Number.isFinite(requestedModuleCount)
-        ? Math.max(1, Math.min(6, Math.floor(requestedModuleCount)))
-        : Math.max(1, Math.min(6, keyPoints.length))
-      const contentStructure = normalizeContentStructure(item.contentStructure)
-      const visualAspect = normalizeVisualAspect(item.visualAspect)
-      const contentDensity = normalizeContentDensity(item.contentDensity)
-      const layoutIntent = normalizeLayoutIntent(item.layoutIntent)
-      const visualFormat = resolvePlannedVisualFormat(item.visualFormat, layoutIntent)
-      const audienceMove = normalizeAudienceMove(item.audienceMove)
-      if (!title) {
-        throw new Error(
-          uiText(
-            args.appLocale,
-            `LLM plan_deck 第 ${index + 1} 项缺少 title，期望格式: { title, keyPoints[], layoutIntent }`,
-            `LLM plan_deck item ${index + 1} is missing title; expected format: { title, keyPoints[], layoutIntent }`
-          )
-        )
-      }
-      if (keyPoints.length < 1) {
-        throw new Error(
-          uiText(
-            args.appLocale,
-            `LLM plan_deck 第 ${index + 1} 项 keyPoints 为空，至少需要 1 条。`,
-            `LLM plan_deck item ${index + 1} has empty keyPoints; at least one item is required.`
-          )
-        )
-      }
-      return {
-        title,
-        contentOutline: normalizeOutlineText(keyPoints.join('；')),
-        // 结构化内容包：带 value/unit/priority，锁定模式按槽位取用
-        items: structuredEntries,
-        layoutIntent,
-        contentStructure,
-        moduleCount,
-        visualAspect,
-        contentDensity,
-        visualFormat,
-        audienceMove,
-        layoutId: resolveUniversalLayoutId({
-          value: item.layoutId,
-          moduleCount,
-          intent: layoutIntent,
-          contentStructure,
-          visualAspect,
-          contentDensity
-        })
-      }
-    })
-    if (items.length === 0) {
-      throw new Error(
-        uiText(
-          args.appLocale,
-          'LLM plan_deck 返回空大纲。',
-          'LLM plan_deck returned an empty outline.'
-        )
-      )
-    }
-    // Pad if LLM returned fewer pages than requested
-    while (items.length < args.totalPages) {
-      items.push({
-        title: uiText(args.appLocale, `第 ${items.length + 1} 页`, `Page ${items.length + 1}`),
-        contentOutline: '',
-        layoutIntent: 'concept'
-      })
-    }
-    return diversifyUniversalLayoutSequence(items.slice(0, args.totalPages))
-  }
-
-  args.emit?.({
-    type: 'llm_status',
-    payload: {
-      runId: args.runId || '',
-      stage: 'planning',
-      label: progressText(args.appLocale, 'planning'),
-      progress: 4,
-      totalPages: args.totalPages,
-      provider: args.provider,
-      model: args.model,
-      detail: uiText(
-        args.appLocale,
-        `正在生成 ${args.totalPages} 页的标题与要点`,
-        `Generating titles and key points for ${args.totalPages} pages`
-      )
-    }
-  })
-  const maxAttempts = 2
-  let lastError: unknown = null
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    if (attempt > 1) {
-      args.emit?.({
-        type: 'llm_status',
-        payload: {
-          runId: args.runId || '',
-          stage: 'planning',
-          label: progressText(args.appLocale, 'planning'),
-          progress: 5,
-          totalPages: args.totalPages,
-          provider: args.provider,
-          model: args.model,
-          detail: uiText(
-            args.appLocale,
-            '页面计划格式异常，正在自动重试一次',
-            'The page plan format was invalid; retrying once'
-          )
-        }
-      })
-    }
-    const previousError =
-      lastError instanceof Error ? lastError.message : lastError ? String(lastError) : ''
-    const effectiveUserPrompt =
-      attempt === 1
-        ? userPrompt
-        : buildPlanningRetryUserPrompt(userPrompt, args.totalPages, previousError)
-    log.info('[llm] invoke plan_deck', {
-      provider: args.provider,
-      model: args.model,
-      temperature: args.temperature ?? null,
-      styleId: args.styleId || '',
-      totalPages: args.totalPages,
-      topic: args.topic,
-      attempt,
-      maxAttempts
-    })
-    try {
-      const combinedSignal = modelCallSignal(args.modelTimeoutMs, 'planning', args.signal)
-      const response = await client.invoke(
-        [
-          { role: 'system' as const, content: systemPrompt },
-          { role: 'user' as const, content: effectiveUserPrompt }
-        ],
-        { signal: combinedSignal }
-      )
-      const responseText = extractModelText(response)
-      args.emit?.({
-        type: 'llm_status',
-        payload: {
-          runId: args.runId || '',
-          stage: 'planning',
-          label: progressText(args.appLocale, 'planning'),
-          progress: 9,
-          totalPages: args.totalPages,
-          provider: args.provider,
-          model: args.model,
-          detail: uiText(
-            args.appLocale,
-            '正在整理成可执行页面计划',
-            'Converting outline into an executable page plan'
-          )
-        }
-      })
-      log.info('[llm] plan_deck response', {
-        attempt,
-        textLength: responseText.length,
-        preview: JSON.stringify(
-          responseText.length > 240 ? `${responseText.slice(0, 240)}…` : responseText
-        )
-      })
-      return parsePlanningItems(responseText)
-    } catch (error) {
-      lastError = error
-      if (args.signal?.aborted || attempt >= maxAttempts) {
-        throw error
-      }
-      log.warn('[llm] plan_deck retry scheduled', {
-        provider: args.provider,
-        model: args.model,
-        attempt,
-        maxAttempts,
-        reason: error instanceof Error ? error.message : String(error)
-      })
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Planning failed'))
-}
-
-export const planNewPage = async (args: {
-  provider: string
-  apiKey: string
-  model: string
-  baseUrl: string
-  temperature?: number
-  maxTokens?: number
-  modelRuntime?: ModelRuntimeConfig
-  modelControl?: GenerationModelControl
-  appLocale?: AppLocale
-  modelTimeoutMs?: number
-  userDescription: string
-  topic?: string
-  existingTitles?: string[]
-  sourceDocumentPaths?: string[]
-  signal?: AbortSignal
-}): Promise<{
-  title: string
-  contentOutline: string
-  layoutIntent: LayoutIntent
-  contentStructure?: import('@shared/universal-layouts').ContentStructure
-  moduleCount?: number
-  visualAspect?: import('@shared/universal-layouts').VisualAspect
-  contentDensity?: import('@shared/universal-layouts').ContentDensity
-  layoutId?: UniversalLayoutId
-}> => {
-  const client = withModelControl(args.modelControl, () =>
-    resolveModel(
-      args.provider,
-      args.apiKey,
-      args.model,
-      args.baseUrl,
-      args.temperature,
-      args.maxTokens,
-      args.modelRuntime
-    )
-  )
-  const systemPrompt = [
-    'You are a PPT slide planner. The user wants to add ONE new slide to an existing deck.',
-    'Generate a title, concise key points (1-10 items), a layout intent, and a universal layout ID for this single slide.',
-    '',
-    CONTENT_LANGUAGE_RULES,
-    '',
-    'The new slide must fit naturally into the existing deck:',
-    '- The title language and style must match existing slide titles.',
-    '- Do NOT duplicate or closely paraphrase any existing slide title.',
-    args.topic ? `- Deck topic: ${args.topic}` : '',
-    args.sourceDocumentPaths?.length
-      ? [
-          '',
-          'Source document context:',
-          '- This deck has user-imported reference documents. Plan a slide title and key points that can be verified against the source during generation.',
-          `- sourceDocumentPaths: ${args.sourceDocumentPaths.join(', ')}`,
-          '- Do not invent unsupported exact facts, metrics, examples, risks, decisions, or conclusions in this planning step.'
-        ].join('\n')
-      : '',
-    '',
-    'Assign layoutIntent based on the slide content type:',
-    '  - data-focus: metrics, KPIs, trends, or quantitative results',
-    '  - comparison: comparing 2+ options or alternatives',
-    '  - timeline: phases, stages, roadmap',
-    '  - concept: ideas, frameworks, principles',
-    '  - process: how something works, step-by-step',
-    '  - summary: conclusion, key takeaways',
-    '  - quote: a single statement or judgment',
-    '  - image-focus: products, scenes, visuals',
-    '',
-    'Universal layout catalog:',
-    formatUniversalLayoutCatalogPrompt(),
-    '',
-    'Choose contentStructure, moduleCount, visualAspect, and contentDensity before choosing a compatible catalog layoutId. Five or six portrait visuals with short labels may use one row; landscape visuals must use rows or grids. Nearby slides with the same structure should use a different silhouette.',
-    'Return only a JSON object with exactly these fields: title, keyPoints, layoutIntent, contentStructure, moduleCount, visualAspect, contentDensity, layoutId.',
-    'Do not add explanations, Markdown, or extra text.',
-    'keyPoints must contain 1-10 short phrases. If the user explicitly lists topics for this slide, preserve each listed topic as a separate key point when possible.'
-  ]
-    .filter(Boolean)
-    .join('\n')
-  const contextParts: string[] = []
-  if (args.existingTitles && args.existingTitles.length > 0) {
-    contextParts.push('Existing slide titles (do NOT duplicate these):')
-    args.existingTitles.forEach((t, i) => contextParts.push(`  ${i + 1}. ${t}`))
-    contextParts.push('')
-  }
-  contextParts.push('User request for the new slide:')
-  contextParts.push(args.userDescription)
-  const userPrompt = contextParts.join('\n')
-
-  const combinedSignal = args.modelTimeoutMs
-    ? AbortSignal.any([
-        AbortSignal.timeout(args.modelTimeoutMs),
-        args.signal || AbortSignal.timeout(120_000)
-      ])
-    : args.signal || undefined
-
-  const response = await client.invoke(
-    [
-      { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: userPrompt }
-    ],
-    { signal: combinedSignal }
-  )
-  const responseText = extractModelText(response)
-  const parsed = parseModelJson(responseText, args.appLocale)
-
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('LLM plan_new_page returned invalid format; expected a JSON object.')
-  }
-  const item = parsed as Record<string, unknown>
-  const title = String(item.title ?? '').trim()
-  if (!title) {
-    throw new Error('LLM plan_new_page missing title field.')
-  }
-  const structuredEntries = normalizeOutlineEntries(item.keyPoints)
-  const keyPoints = structuredEntries.map((entry) => entry.label)
-  const contentOutline = normalizeOutlineText(keyPoints.join('；'))
-  const layoutIntent = normalizeLayoutIntent(item.layoutIntent)
-  const contentStructure = normalizeContentStructure(item.contentStructure)
-  const visualAspect = normalizeVisualAspect(item.visualAspect)
-  const contentDensity = normalizeContentDensity(item.contentDensity)
-  const requestedModuleCount = Number(item.moduleCount)
-  const moduleCount = Number.isFinite(requestedModuleCount)
-    ? Math.max(1, Math.min(6, Math.floor(requestedModuleCount)))
-    : Math.max(1, Math.min(6, keyPoints.length))
-  const layoutId = resolveUniversalLayoutId({
-    value: item.layoutId,
-    moduleCount,
-    intent: layoutIntent,
-    contentStructure,
-    visualAspect,
-    contentDensity
-  })
-
-  return {
-    title,
-    contentOutline,
-    layoutIntent,
-    contentStructure,
-    moduleCount,
-    visualAspect,
-    contentDensity,
-    layoutId
-  }
-}
-
-export const buildDesignContractWithLLM = async (args: {
-  provider: string
-  apiKey: string
-  model: string
-  baseUrl: string
-  temperature?: number
-  maxTokens?: number
-  modelRuntime?: ModelRuntimeConfig
-  modelControl?: GenerationModelControl
-  styleId: string | null | undefined
-  styleSkillPrompt: string
-  layoutRulesPrompt?: string
-  styleKey?: string
-  styleName?: string
-  styleVersion?: string
-  appLocale?: AppLocale
-  modelTimeoutMs?: number
-  totalPages: number
-  slideSize: SlideSizePreset
-  topic?: string
-  userMessage?: string
-  fontSelection?: FontSelection
-  emit?: (chunk: GenerateChunkEvent) => void
-  runId?: string
-  signal?: AbortSignal
-}): Promise<DesignContract> => {
-  const client = withModelControl(args.modelControl, () =>
-    resolveModel(
-      args.provider,
-      args.apiKey,
-      args.model,
-      args.baseUrl,
-      args.temperature,
-      args.maxTokens,
-      args.modelRuntime
-    )
-  )
-  const totalPages = Math.max(1, args.totalPages)
-  const availableFonts: AvailableFont[] = await buildAvailableFontsForPrompt()
-  const requestedFontPair = resolveFontPair(args.fontSelection)
-  if (requestedFontPair) {
-    await assertFontFamilyAvailable(requestedFontPair.titleFont, 'titleFont')
-    await assertFontFamilyAvailable(requestedFontPair.subtitleFont, 'subtitleFont')
-    await assertFontFamilyAvailable(requestedFontPair.bodyFont, 'bodyFont')
-  }
-  const languageHint = detectFontLanguageHint(
-    [args.topic || '', args.userMessage || '', args.styleSkillPrompt || ''].join('\n')
-  )
-  const systemPrompt = buildDesignContractSystemPrompt({
-    styleSkill: [args.styleSkillPrompt, args.layoutRulesPrompt].filter(Boolean).join('\n\n'),
-    availableFonts,
-    requestedFontPair,
-    languageHint,
-    slideSize: args.slideSize
-  })
-  const userPrompt = buildDesignContractUserPrompt()
-  const parseDesignContract = async (responseText: string): Promise<DesignContract> => {
-    const parsed = parseModelJson(responseText, args.appLocale)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(
-        uiText(
-          args.appLocale,
-          'LLM design_contract 返回格式不正确，期望 JSON object。',
-          'LLM design_contract returned an invalid format; expected a JSON object.'
-        )
-      )
-    }
-    const record = parsed as Record<string, unknown>
-    const requiredKeys = [
-      'theme',
-      'background',
-      'palette',
-      'titleStyle',
-      'layoutMotif',
-      'chartStyle',
-      'shapeLanguage',
-      'titleFont',
-      'bodyFont'
-    ]
-    const missingKeys = requiredKeys.filter(
-      (key) => record[key] === undefined || record[key] === ''
-    )
-    if (missingKeys.length > 0) {
-      throw new Error(
-        uiText(
-          args.appLocale,
-          `LLM design_contract 缺少字段：${missingKeys.join(', ')}`,
-          `LLM design_contract is missing fields: ${missingKeys.join(', ')}`
-        )
-      )
-    }
-    if (!Array.isArray(record.palette) || record.palette.length < 3) {
-      throw new Error(
-        uiText(
-          args.appLocale,
-          'LLM design_contract palette 至少需要 3 个颜色。',
-          'LLM design_contract palette must contain at least 3 colors.'
-        )
-      )
-    }
-    const contract = normalizeDesignContract(parsed)
-    if (requestedFontPair) {
-      if (
-        contract.titleFont !== requestedFontPair.titleFont ||
-        contract.subtitleFont !== requestedFontPair.subtitleFont ||
-        contract.bodyFont !== requestedFontPair.bodyFont
-      ) {
-        throw new Error(
-          uiText(
-            args.appLocale,
-            `LLM design_contract 字体与用户选择不一致：titleFont=${contract.titleFont}, bodyFont=${contract.bodyFont}`,
-            `LLM design_contract fonts do not match the user selection: titleFont=${contract.titleFont}, bodyFont=${contract.bodyFont}`
-          )
-        )
-      }
-    }
-    await assertFontFamilyAvailable(contract.titleFont, 'titleFont')
-    await assertFontFamilyAvailable(contract.bodyFont, 'bodyFont')
-    return contract
-  }
-  args.emit?.({
-    type: 'llm_status',
-    payload: {
-      runId: args.runId || '',
-      stage: 'planning',
-      label: progressText(args.appLocale, 'planning'),
-      progress: 9,
-      totalPages,
-      provider: args.provider,
-      model: args.model,
-      detail: uiText(args.appLocale, '正在生成独立设计契约', 'Generating design contract')
-    }
-  })
-  const maxAttempts = 2
-  let lastError: unknown = null
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    if (attempt > 1) {
-      args.emit?.({
-        type: 'llm_status',
-        payload: {
-          runId: args.runId || '',
-          stage: 'planning',
-          label: progressText(args.appLocale, 'planning'),
-          progress: 9,
-          totalPages,
-          provider: args.provider,
-          model: args.model,
-          detail: uiText(
-            args.appLocale,
-            '设计契约格式异常，正在自动重试一次',
-            'The design contract format was invalid; retrying once'
-          )
-        }
-      })
-    }
-    const previousError =
-      lastError instanceof Error ? lastError.message : lastError ? String(lastError) : ''
-    const effectiveUserPrompt =
-      attempt === 1 ? userPrompt : buildDesignContractRetryUserPrompt(userPrompt, previousError)
-    try {
-      const combinedSignal = modelCallSignal(args.modelTimeoutMs, 'design', args.signal)
-      const response = await client.invoke(
-        [
-          {
-            role: 'system' as const,
-            content: systemPrompt
-          },
-          {
-            role: 'user' as const,
-            content: effectiveUserPrompt
-          }
-        ],
-        { signal: combinedSignal }
-      )
-      const responseText = assertModelText(response, {
-        maxTokens: args.maxTokens,
-        locale: args.appLocale
-      })
-      log.info('[llm] design_contract response', {
-        attempt,
-        textLength: responseText.length,
-        preview: JSON.stringify(
-          responseText.length > 240 ? `${responseText.slice(0, 240)}…` : responseText
-        )
-      })
-      const contract = await parseDesignContract(responseText)
-      args.emit?.({
-        type: 'llm_status',
-        payload: {
-          runId: args.runId || '',
-          stage: 'planning',
-          label: progressText(args.appLocale, 'planning'),
-          progress: 10,
-          totalPages,
-          provider: args.provider,
-          model: args.model,
-          detail: contract.theme
-        }
-      })
-      return contract
-    } catch (error) {
-      if (args.signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
-        throw error
-      }
-      lastError = error
-      if (attempt < maxAttempts) {
-        log.warn('[llm] design_contract retry scheduled', {
-          provider: args.provider,
-          model: args.model,
-          attempt,
-          maxAttempts,
-          message: error instanceof Error ? error.message : String(error)
-        })
-        continue
-      }
-    }
-  }
-  log.warn('[llm] design_contract failed', {
-    provider: args.provider,
-    model: args.model,
-    temperature: args.temperature ?? null,
-    styleId: args.styleId || '',
-    message: lastError instanceof Error ? lastError.message : String(lastError)
-  })
-  throw new Error(
-    uiText(
-      args.appLocale,
-      `设计契约生成失败：${lastError instanceof Error ? lastError.message : String(lastError)}`,
-      `Failed to generate design contract: ${
-        lastError instanceof Error ? lastError.message : String(lastError)
-      }`
-    )
-  )
-}
+export { buildDesignContractWithLLM } from './planning/design-contract-builder'
 
 export const runDeepAgentDeckGeneration = async (args: {
   sessionId: string
@@ -1510,8 +658,9 @@ export const runDeepAgentDeckGeneration = async (args: {
       // Raw messages may be token deltas, tool-call turns, or cumulative provider chunks.
       let streamError: unknown = null
       let lastWriteValidationFailure = ''
+      let finalAssistantText = ''
       try {
-        await processAgentStreamCore(stream, {
+        const streamOutcome = await processAgentStreamCore(stream, {
           emit: args.emit,
           runId: args.runId || '',
           stage: 'rendering',
@@ -1555,12 +704,68 @@ export const runDeepAgentDeckGeneration = async (args: {
             })
           }
         })
+        finalAssistantText = streamOutcome.finalAssistantText
       } catch (error) {
         streamError = error
       }
 
-      const afterPageHtml = await readPageHtmlIfExists(currentPagePath)
-      const pageCommitted = hasCommittedGeneratedPage(beforePageHtml, afterPageHtml)
+      let afterPageHtml = await readPageHtmlIfExists(currentPagePath)
+      let pageCommitted = hasCommittedGeneratedPage(beforePageHtml, afterPageHtml)
+      if (!pageCommitted && !streamError) {
+        // 模型没调用写盘工具、但把 HTML 写在了最终回复里时，直接提取落盘，
+        // 走同一套修复/校验管道，避免重试耗尽整页失败。
+        const rescueCandidate = extractHtmlFragmentCandidate(finalAssistantText)
+        if (rescueCandidate) {
+          try {
+            log.info('[deepagent] rescuing page from final assistant text', {
+              sessionId: args.sessionId,
+              pageId: page.pageId,
+              worker: workerLabel,
+              contentLength: rescueCandidate.length
+            })
+            emitPageStatus({
+              pageId: page.pageId,
+              label: renderingLabel,
+              detail: uiText(
+                args.appLocale,
+                `${page.title} · 从最终回复恢复页面内容`,
+                `${page.title} · recovered page content from the final response`
+              ),
+              pageProgress: 60
+            })
+            await persistPageHtmlFromFragment({
+              content: rescueCandidate,
+              pageId: page.pageId,
+              pageNumber: page.pageNumber,
+              projectDir: args.projectDir,
+              targetPath: currentPagePath,
+              slideSize: args.slideSize,
+              designFonts: args.designContract
+                ? {
+                    titleFont: args.designContract.titleFont,
+                    subtitleFont: args.designContract.subtitleFont,
+                    bodyFont: args.designContract.bodyFont
+                  }
+                : undefined
+            })
+            afterPageHtml = await readPageHtmlIfExists(currentPagePath)
+            pageCommitted = hasCommittedGeneratedPage(beforePageHtml, afterPageHtml)
+          } catch (rescueError) {
+            log.warn('[deepagent] rescue write from final response failed', {
+              sessionId: args.sessionId,
+              pageId: page.pageId,
+              message: rescueError instanceof Error ? rescueError.message : String(rescueError)
+            })
+          }
+        } else {
+          log.warn('[deepagent] page not written; final assistant text preview', {
+            sessionId: args.sessionId,
+            pageId: page.pageId,
+            worker: workerLabel,
+            preview: finalAssistantText.slice(0, 400)
+          })
+        }
+      }
       if (streamError && !pageCommitted) throw streamError
       if (!pageCommitted) {
         throw new Error(

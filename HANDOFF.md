@@ -1,6 +1,6 @@
 # Amy-PPT 项目上下文与交接文档
 
-> 更新时间：2026-08-27 · 当前版本 **1.0.4**
+> 更新时间：2026-08-28 · 当前版本 **1.0.4**
 > 本文件面向接手开发/协作者：项目全景、近期演进、打包发布 SOP。新 Agent 会话开始时优先读本文件，再按需查阅 `README.md`、`PROJECT_STRUCTURE.md`、`AGENTS.md`。
 
 ---
@@ -25,9 +25,24 @@
 
 ### 核心链路（改公共规则时三条都要确认）
 
-1. **生成链路**：`src/main/generation/deck-flow.ts`（~1400 行，主编排）→ `agent-runner.ts`（~2100 行，LLM 编排 + 结构化内容提取 + 重试）
+1. **生成链路**：`src/main/generation/deck-flow.ts`（~1400 行，主编排）→ `agent-runner.ts`（~1800 行，LLM 编排 + 重试；规划类逻辑已拆入 `generation/planning/`：`deck-planner` / `page-planner` / `design-contract-builder` / `model-response`（LLM JSON 解析），流处理拆入 `agent-stream-processor.ts`）
 2. **编辑链路**：整页编辑、deck 编辑、selector 编辑（`edit-flow.ts`、`retry-flow.ts`、`page-merge-*`）
 3. **运行时资源**：session asset 兼容/刷新机制
+
+### 数据层（2026-08 拆分，门面 + 仓库模式）
+
+- `db/records.ts` — 全部行类型与字符串联合类型（`SessionJobKind` 等），`database.ts` `export *` 兜底旧导入路径
+- `db/repositories/` — 7 个仓库类（config / project / html-editor / image-generation-history / session-style-snapshot / thumbnail / user-preference），按表聚合 CRUD
+- `db/services/` — 跨仓库业务（`session-style-snapshot-service`）
+- `db/database.ts`（2767 行，原 3758）— `PPTDatabase` 门面：持有仓库实例、委托调用，session/run/页面等核心表仍在门面内
+- 迁移仍在 `db/patch/index.ts`（~1650 行，不要动历史 patch）
+
+### 会话详情页组件树（2026-08 拆分）
+
+- `pages/session-detail.tsx`（1270 行，原 1894）只做组装
+- `components/session-detail/`（98 个文件，~16k 行）：`hooks/`（14 个：生成事件 `useSessionGenerationEvents`、生命周期、任务恢复、聊天控制器、导出/图片操作等）、`ai-panel/`、`workspace/`、`preview/`、`sidebar/`、`browse/`、`style/`、`speech/`、`toolbar/`、`modal/`、`element-inspector/`、`shared/`
+- `components/presentation-webview/` — `PreviewIframe` 与 `HtmlEditorCanvas` 共享的预览 URL/运行时注入工具（`webview-utils.ts`、`usePresentationWebviewRuntime`）
+- ⚠️ 源码断言类测试（读源文件文本的）在代码搬家后要同步改读新路径，见 `tests/unit/prompt/source-grounding.test.ts` 等的写法
 
 ### 版式资产系统（参考 dashi-ppt-skill 采用）
 
@@ -63,6 +78,11 @@
 13. **前置规范拦截** `preflight-spec.ts`：标题截断、图像路径存在性检查
 14. **资产完整性校验** `asset-integrity.ts`：src/href/poster/srcset + CSS url() 扫描
 15. **v1.0.4 发布**（见下）
+16. **对话创作大纲卡片视图**（Unreleased）：`ThinkingPageCards` 列表/网格切换，16:9 幻灯片式占位卡（一行 3 个、面板自动 360→640px 加宽），网格模式弹窗编辑（复用同一套 `thinkingUpdatePageOutline` IPC）
+17. **生成重试死循环修复**（Unreleased）：写盘被质量校验拒绝（如 `font-below-floor`）且模型未再调用写盘工具时，"页面未写入"错误现在保留最近一次校验拒绝详情（`page-write-failure.ts`），重试提示词与方法级信号补上字号修正指引，不再重试耗尽
+18. **标题带 deck 级统一**（Unreleased）：反转三处"标题位置逐页变化"指令（deck-system 提示词 / `amy-ppt-layout` 技能 §6 / 专家文案），标题带（对齐、字号档位、kicker/装饰、标题-内容间距）写入 deck 级硬契约，`deck-title-anchor-drift` 升为 error 级并增加标题字号中位漂移检测；封面/金句/全图页豁免
+19. **演示级字号/图标默认值**（Unreleased）：1600×900 画布默认值正文 20→24px、模块标题 24→28px、副标题 26→28px、页标题 40→48px（与运行时 48px 强制值对齐）、重点数字 52→56px、图标底托 52→64px、卡片内边距 24→32px；高度预算超限时必须先删文案/合并模块，禁止缩字号硬塞。设置 → 排版规则中仍可按会话覆盖这些值
+20. **可维护性大拆分**（Unreleased，纯结构无行为变化）：`database.ts` 3758→2767（拆出 `records.ts` + 7 个 repositories + services）、`agent-runner.ts` 2595→1800（拆出 `planning/` 4 件套 + `agent-stream-processor`）、`session-detail.tsx` 1894→1270（拆出 `components/session-detail/` 98 文件组件树 + hooks）、`PreviewIframe`/`HtmlEditorCanvas` 共享 `presentation-webview/`。同步修复 7 个因搬家/默认值/仓库名过期而失败的测试；Windows 无符号链接权限时 symlink 测试自跳过。全量 335 测试文件 + typecheck 双绿
 
 ## 4. 打包发布 SOP（含踩过的坑）⚠️ 必读
 

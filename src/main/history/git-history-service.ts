@@ -4,12 +4,12 @@ import crypto from 'crypto'
 import log from 'electron-log/main.js'
 import * as git from 'isomorphic-git'
 import { nanoid } from 'nanoid'
+import type { PPTDatabase } from '../db/database'
 import type {
-  PPTDatabase,
   SessionOperationRecord,
   SessionPageRecord,
   SessionStyleSnapshotRow
-} from '../db/database'
+} from '../db/records'
 import {
   HISTORY_VERSION_LIMIT,
   type ChangedHistoryFile,

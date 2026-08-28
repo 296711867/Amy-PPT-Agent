@@ -6,7 +6,7 @@ import type {
   ImageGenerationHistoryRecord,
   ImageModelProvider
 } from '@shared/image-generation'
-import type { ImageGenerationHistoryRow } from '../db/database'
+import type { ImageGenerationHistoryRow } from '../db/records'
 import type { IpcContext } from '../ipc/context'
 import { allowLocalAssetRoot } from '../io/local-asset-roots'
 

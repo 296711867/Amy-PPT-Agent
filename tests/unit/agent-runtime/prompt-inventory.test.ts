@@ -20,7 +20,7 @@ describe('Runtime prompt inventory', () => {
   })
 
   it('keeps each inventory builder present in its documented Runtime source file', () => {
-    expect(readSource('src/main/generation/agent-runner.ts')).toContain('planNewPage')
+    expect(readSource('src/main/generation/planning/page-planner.ts')).toContain('planNewPage')
     expect(readSource('src/main/io/document-parse-handlers.ts')).toContain(
       'buildImageDocumentPlanPrompt'
     )

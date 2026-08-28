@@ -127,14 +127,22 @@ describe('page merge resource rewriter', () => {
     expect(isMergePathInside('/sessions/outside.png', '/sessions/source')).toBe(false)
   })
 
-  it('rejects symlinks that resolve outside the source project root', async () => {
+  it('rejects symlinks that resolve outside the source project root', async (ctx) => {
     const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'page-merge-path-'))
     const sourceRoot = path.join(root, 'source')
     const outsidePath = path.join(root, 'outside.png')
     await fs.promises.mkdir(sourceRoot, { recursive: true })
     await fs.promises.writeFile(outsidePath, 'outside')
     const linkedPath = path.join(sourceRoot, 'linked.png')
-    await fs.promises.symlink(outsidePath, linkedPath)
+    try {
+      await fs.promises.symlink(outsidePath, linkedPath)
+    } catch (error) {
+      if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM') {
+        ctx.skip('Windows without developer mode cannot create symlinks')
+        return
+      }
+      throw error
+    }
 
     try {
       await expect(resolveMergeFileInside(linkedPath, sourceRoot)).resolves.toBeNull()

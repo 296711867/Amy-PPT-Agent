@@ -3,7 +3,7 @@ import path from 'path'
 import log from 'electron-log/main.js'
 import { customAlphabet, nanoid } from 'nanoid'
 import type { IpcContext } from '../ipc/context'
-import type { SourcePageSkeletonRecord } from '../db/database'
+import type { SourcePageSkeletonRecord } from '../db/records'
 import { SESSION_ASSET_FILE_NAMES } from './template-builder'
 import { validatePersistedPageHtml } from '../presentation/html/html-utils'
 import {

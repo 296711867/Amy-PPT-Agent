@@ -1,4 +1,4 @@
-import type { SessionStyleSnapshotRow } from '../db/database'
+import type { SessionStyleSnapshotRow } from '../db/records'
 import type { JobLease } from '../agent-runtime'
 import type { EditContext } from '../generation/types'
 import type { LayoutIntent } from '@shared/layout-intent'

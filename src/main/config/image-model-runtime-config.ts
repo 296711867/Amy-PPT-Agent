@@ -1,4 +1,4 @@
-import type { ImageModelConfigRow } from '../db/database'
+import type { ImageModelConfigRow } from '../db/records'
 
 const BBT_IMAGE_MODEL_CONFIG_ID = 'codex-bbt-image-model'
 const BBT_IMAGE_MODEL = 'gpt-image-2'

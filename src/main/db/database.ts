@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
-import { eq, ne, gt, lte, count, max, asc, desc, sql, and, or, isNull, inArray } from 'drizzle-orm'
+import { eq, ne, gt, count, max, asc, desc, sql, and, or, isNull, inArray } from 'drizzle-orm'
 import * as schema from './schema'
 import {
   toInsertValues,
@@ -20,7 +20,6 @@ import {
   readStylePackage,
   styleRowToPackageJson
 } from '../styles'
-import type { HtmlThumbnailResourceType } from '@shared/thumbnail'
 import type {
   ModelUsageByHour,
   ModelUsagePeriod,
@@ -28,104 +27,80 @@ import type {
   ModelUsageTotals
 } from '@shared/model-usage'
 import type { AnimationPreferencesPayload } from '@shared/generation'
-import { normalizeThinkingParameterMode } from '@shared/model-config'
-import { requirePersistedSlideSize, type SlideSizePresetId } from '@shared/slide-size'
-import type { HtmlEditDocument, HtmlEditMessage, HtmlEditVersion } from './schema'
+import { requirePersistedSlideSize } from '@shared/slide-size'
+import type { SlideSizePresetId } from '@shared/slide-size'
+import type { HtmlThumbnailResourceType } from '@shared/thumbnail'
+import {
+  HtmlEditorRepository,
+  type CreateHtmlEditDocumentInput,
+  type CreateHtmlEditDocumentWithVersionInput,
+  type CreateHtmlEditMessageInput,
+  type CreateHtmlEditVersionInput
+} from './repositories/html-editor-repository'
+import {
+  ConfigRepository,
+  type UpsertImageModelConfigInput,
+  type UpsertModelConfigInput
+} from './repositories/config-repository'
+import {
+  ImageGenerationHistoryRepository,
+  type InsertImageGenerationHistoryInput
+} from './repositories/image-generation-history-repository'
+import {
+  ThumbnailRepository,
+  type UpsertThumbnailRecordInput
+} from './repositories/thumbnail-repository'
+import {
+  UserPreferenceRepository,
+  type UpsertUserPreferenceInput
+} from './repositories/user-preference-repository'
+import {
+  ProjectRepository,
+  type CreateProjectInput,
+  type ProjectStatus
+} from './repositories/project-repository'
+import { SessionStyleSnapshotRepository } from './repositories/session-style-snapshot-repository'
+import { SessionStyleSnapshotService } from './services/session-style-snapshot-service'
+import {
+  type ChatScope,
+  type GenerationPageRecord,
+  type GenerationPageStatus,
+  type GenerationRunMode,
+  type GenerationRunRecord,
+  type GenerationRunStatus,
+  type ImageGenerationHistoryRow,
+  type ImageModelConfigRow,
+  type Message,
+  type MessageRole,
+  type MessageType,
+  type ModelConfigRow,
+  type ProjectRecord,
+  type Session,
+  type SessionJobKind,
+  type SessionJobRecord,
+  type SessionJobStatus,
+  type SessionOperationPageRecord,
+  type SessionOperationRecord,
+  type SessionOperationScope,
+  type SessionOperationStatus,
+  type SessionOperationType,
+  type SessionPageInput,
+  type SessionPageRecord,
+  type SessionPageStatus,
+  type SessionStatus,
+  type SessionStyleSnapshotInput,
+  type SessionStyleSnapshotRow,
+  type SessionWithPageCount,
+  type SourcePageSkeletonConfidence,
+  type SourcePageSkeletonRecord,
+  type SourcePageSkeletonRole,
+  type StyleRow,
+  type StyleSource,
+  type ThumbnailRecord,
+  type UserPreferenceRecord
+} from './records'
+export * from './records'
 
-type SessionStatus = 'active' | 'completed' | 'failed' | 'archived'
-type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
-type MessageType = 'text' | 'tool_call' | 'tool_result' | 'stream_chunk'
-type ChatScope = 'main' | 'page'
-type StyleSource = 'builtin' | 'custom' | 'override'
-type GenerationRunMode =
-  | 'generate'
-  | 'retry'
-  | 'edit'
-  | 'import'
-  | 'addPage'
-  | 'retrySinglePage'
-  | 'style-switch'
-  | 'page-beautify'
-type GenerationRunStatus = 'running' | 'completed' | 'failed' | 'partial'
-export type SessionJobKind =
-  | 'standard'
-  | 'template'
-  | 'retry'
-  | 'add-page'
-  | 'single-page-retry'
-  | 'page-edit'
-  | 'deck-edit'
-  | 'style-switch'
-  | 'page-beautify'
-export type SessionJobStatus = 'pending' | 'active' | 'finished' | 'aborted'
-type GenerationPageStatus = 'pending' | 'running' | 'completed' | 'failed'
-type SessionPageStatus = schema.SessionPageStatus
-type SourcePageSkeletonRole = 'chapter-divider' | 'content'
-type SourcePageSkeletonConfidence = 'high' | 'medium' | 'low'
-type SessionOperationType =
-  | 'generate'
-  | 'edit'
-  | 'addPage'
-  | 'retry'
-  | 'import'
-  | 'rollback'
-  | 'reorder'
-  | 'delete'
-type SessionOperationScope = 'session' | 'deck' | 'page' | 'selector' | 'shell'
-type SessionOperationStatus = 'committing' | 'completed' | 'failed' | 'noop'
-
-const parseSessionMetadata = (value: string | null | undefined): Record<string, unknown> => {
-  if (!value || !value.trim()) return {}
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {}
-  } catch {
-    return {}
-  }
-}
-
-export interface Session {
-  id: string
-  title: string
-  topic: string | null
-  styleId: string | null
-  page_count: number | null
-  slideSizeId?: SlideSizePresetId
-  slideWidth?: number
-  slideHeight?: number
-  reference_document_path: string | null
-  referenceDocumentPath?: string | null
-  status: SessionStatus
-  provider: string
-  model: string
-  created_at: number
-  updated_at: number
-  metadata: string | null
-  designContract?: string | null
-  currentOperationId?: string | null
-  currentCommit?: string | null
-  totalTokens?: number | null
-}
-
-export interface Message {
-  id: string
-  session_id: string
-  chat_scope: ChatScope
-  page_id: string | null
-  selector: string | null
-  image_paths: string[] | null
-  video_paths: string[] | null
-  role: MessageRole
-  content: string
-  type: MessageType
-  tool_name: string | null
-  tool_call_id: string | null
-  token_count: number | null
-  run_model: string | null
-  created_at: number
-}
 
 interface MemorySummary {
   id: string
@@ -137,59 +112,6 @@ interface MemorySummary {
   created_at: number
 }
 
-interface UserPreference {
-  key: string
-  value: unknown
-  confidence: number
-  source_sessions: string[]
-  created_at: number
-  updated_at: number
-  last_used_at: number | null
-}
-
-interface Project {
-  id: string
-  session_id: string
-  title: string
-  output_path: string
-  root_path: string | null
-  file_count: number
-  total_size: number
-  status: 'draft' | 'published' | 'exported'
-  created_at: number
-  updated_at: number
-}
-
-export interface GenerationRunRecord {
-  id: string
-  session_id: string
-  mode: GenerationRunMode
-  status: GenerationRunStatus
-  total_pages: number
-  error: string | null
-  metadata: string | null
-  animation_preferences: string | null
-  model_config_id: string | null
-  created_at: number
-  updated_at: number
-}
-
-export interface SessionJobRecord {
-  id: string
-  session_id: string
-  kind: SessionJobKind
-  previous_session_status: SessionStatus
-  target_page_id: string | null
-  target_page_number: number | null
-  selector: string | null
-  total_pages: number | null
-  status: SessionJobStatus
-  abort_reason: string | null
-  created_at: number
-  activated_at: number | null
-  updated_at: number
-  finished_at: number | null
-}
 
 type GenerationRunCreateData = {
   id?: string
@@ -228,235 +150,6 @@ type GenerationPageCreateData = {
   retryCount?: number
 }
 
-export interface GenerationPageRecord {
-  id: string
-  run_id: string
-  session_id: string
-  page_id: string
-  page_number: number
-  title: string
-  content_outline: string | null
-  layout_intent: string | null
-  layout_id: string | null
-  image_asset_path: string | null
-  image_asset_paths: string[]
-  html_path: string | null
-  status: GenerationPageStatus
-  error: string | null
-  retry_count: number
-  created_at: number
-  updated_at: number
-}
-
-export interface SessionPageRecord {
-  id: string
-  session_id: string
-  legacy_page_id: string | null
-  file_slug: string
-  page_number: number
-  title: string
-  html_path: string
-  status: SessionPageStatus
-  error: string | null
-  created_at: number
-  updated_at: number
-  deleted_at: number | null
-}
-
-export type ThumbnailStatus = 'queued' | 'running' | 'completed' | 'failed'
-
-export interface ThumbnailRecord {
-  key: string
-  resourceType: HtmlThumbnailResourceType
-  resourceId: string
-  variant: string
-  sourcePath: string
-  sourceMtimeMs: number
-  signature: string
-  thumbnailPath: string
-  status: ThumbnailStatus
-  error: string | null
-  createdAt: number
-  updatedAt: number
-}
-
-export interface SourcePageSkeletonRecord {
-  id: string
-  session_id: string
-  page_number: number
-  title: string
-  role: SourcePageSkeletonRole
-  source_document_path: string
-  source_document_name: string | null
-  source_heading: string
-  heading_level: number
-  line_start: number
-  line_end: number
-  reason: string | null
-  layout_intent: string | null
-  layout_id: string | null
-  confidence: SourcePageSkeletonConfidence
-  created_at: number
-  updated_at: number
-}
-
-export interface SessionPageInput {
-  id: string
-  sessionId: string
-  legacyPageId?: string | null
-  fileSlug: string
-  pageNumber: number
-  title: string
-  htmlPath: string
-  status?: SessionPageStatus
-  error?: string | null
-}
-
-export interface SessionWithPageCount {
-  session: Session
-  pageCount: number
-}
-
-export const sessionPageRecordToInput = (page: SessionPageRecord): SessionPageInput => ({
-  id: page.id,
-  sessionId: page.session_id,
-  legacyPageId: page.legacy_page_id,
-  fileSlug: page.file_slug,
-  pageNumber: page.page_number,
-  title: page.title,
-  htmlPath: page.html_path,
-  status: page.status,
-  error: page.error
-})
-
-export interface StyleRow {
-  id: string
-  style: string
-  styleName: string
-  styleNameZh: string
-  styleNameEn: string
-  description: string
-  category: string
-  aliases: string // JSON array
-  source: StyleSource
-  styleSkill: string // plain markdown
-  version: string
-  styleCase: string
-  packageDir: string
-  active: boolean
-  favoriteAt: number | null
-  createdAt: number
-  updatedAt: number
-}
-
-export interface SessionStyleSnapshotRow {
-  id: string
-  sessionId: string
-  styleId: string
-  styleKey: string
-  styleName: string
-  styleNameZh: string
-  styleNameEn: string
-  description: string
-  category: string
-  aliases: string
-  source: StyleSource
-  version: string
-  styleCase: string
-  packageDir: string
-  styleSkill: string
-  createdAt: number
-}
-
-/** Session-local style data used when a presentation is created without a catalog preset. */
-export interface SessionStyleSnapshotInput {
-  styleId: string
-  styleKey: string
-  styleName: string
-  styleNameZh?: string
-  styleNameEn?: string
-  description?: string
-  category?: string
-  aliases?: string
-  source?: StyleSource
-  version?: string
-  styleCase?: string
-  packageDir?: string
-  styleSkill: string
-}
-
-export interface ModelConfigRow {
-  id: string
-  name: string
-  provider: string
-  model: string
-  apiKey: string
-  baseUrl: string
-  maxTokens: number
-  disableTemperature: number
-  thinkingParameterMode: string
-  active: number
-  createdAt: number
-  updatedAt: number
-}
-
-export interface ImageModelConfigRow {
-  id: string
-  name: string
-  provider: string
-  active: number
-  modelConfig: string
-  createdAt: number
-  updatedAt: number
-}
-
-export interface ImageGenerationHistoryRow {
-  id: string
-  sessionId: string
-  pageId: string
-  prompt: string
-  imagePaths: string
-  modelConfigId: string
-  provider: string
-  model: string
-  createdAt: number
-}
-
-export interface SessionOperationRecord {
-  id: string
-  session_id: string
-  type: SessionOperationType
-  status: SessionOperationStatus
-  scope: SessionOperationScope | null
-  prompt: string | null
-  parent_operation_id: string | null
-  before_commit: string | null
-  after_commit: string | null
-  target_operation_id: string | null
-  target_commit: string | null
-  changed_files_json: string
-  changed_pages_json: string
-  tracked_files_json: string
-  metadata_json: string
-  created_at: number
-  completed_at: number | null
-}
-
-export interface SessionOperationPageRecord {
-  id: string
-  operation_id: string
-  session_id: string
-  page_id: string
-  legacy_page_id: string | null
-  file_slug: string
-  page_number: number
-  title: string
-  html_path: string
-  status: SessionPageStatus
-  error: string | null
-  created_at: number
-  updated_at: number
-}
 
 export class PPTDatabase {
   private db: ReturnType<typeof drizzle>
@@ -464,6 +157,14 @@ export class PPTDatabase {
   private _storagePath: string | null = null
   private _initialized = false
   private _stylesCache: StyleRow[] = []
+  private htmlEditorRepository: HtmlEditorRepository
+  private configRepository: ConfigRepository
+  private imageGenerationHistoryRepository: ImageGenerationHistoryRepository
+  private thumbnailRepository: ThumbnailRepository
+  private userPreferenceRepository: UserPreferenceRepository
+  private projectRepository: ProjectRepository
+  private sessionStyleSnapshotRepository: SessionStyleSnapshotRepository
+  private sessionStyleSnapshotService: SessionStyleSnapshotService
 
   constructor(dbPath?: string) {
     const defaultPath = is.dev
@@ -480,6 +181,18 @@ export class PPTDatabase {
 
     this.client = createClient({ url })
     this.db = drizzle(this.client, { schema })
+    this.htmlEditorRepository = new HtmlEditorRepository(this.db)
+    this.configRepository = new ConfigRepository(this.db)
+    this.imageGenerationHistoryRepository = new ImageGenerationHistoryRepository(this.db)
+    this.thumbnailRepository = new ThumbnailRepository(this.db)
+    this.userPreferenceRepository = new UserPreferenceRepository(this.db)
+    this.projectRepository = new ProjectRepository(this.db)
+    this.sessionStyleSnapshotRepository = new SessionStyleSnapshotRepository(this.db)
+    this.sessionStyleSnapshotService = new SessionStyleSnapshotService({
+      repository: this.sessionStyleSnapshotRepository,
+      getSession: (sessionId) => this.getSession(sessionId),
+      resolveCatalogStyle: (styleId) => this.resolveSnapshotStyleRow(styleId)
+    })
     this._storagePath = null
   }
 
@@ -514,200 +227,59 @@ export class PPTDatabase {
 
   // ========== HTML Editor ==========
 
-  async createHtmlEditDocument(data: {
-    id: string
-    title: string
-    sourcePath?: string | null
-    htmlPath: string
-    designWidth: number
-    createdAt: number
-    updatedAt: number
-  }): Promise<void> {
-    await this.db.insert(schema.htmlEditDocuments).values({
-      id: data.id,
-      title: data.title,
-      sourcePath: data.sourcePath ?? null,
-      htmlPath: data.htmlPath,
-      designWidth: data.designWidth,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt
-    })
+  async createHtmlEditDocument(data: CreateHtmlEditDocumentInput): Promise<void> {
+    return this.htmlEditorRepository.createDocument(data)
   }
 
   async touchHtmlEditDocument(docId: string, updatedAt: number): Promise<void> {
-    await this.db
-      .update(schema.htmlEditDocuments)
-      .set({ updatedAt })
-      .where(eq(schema.htmlEditDocuments.id, docId))
+    return this.htmlEditorRepository.touchDocument(docId, updatedAt)
   }
 
-  async createHtmlEditMessage(data: {
-    id: string
-    docId: string
-    role: 'user' | 'assistant'
-    content: string
-    intent?: string | null
-    planJson?: string | null
-    requiresConfirmation?: boolean
-    selectedElement?: {
-      selector: string
-      label?: string
-      elementTag?: string
-      elementText?: string
-    } | null
-    createdAt: number
-  }): Promise<void> {
-    const selectedElement = data.selectedElement?.selector ? data.selectedElement : null
-    await this.db
-      .insert(schema.htmlEditMessages)
-      .values({
-        id: data.id,
-        docId: data.docId,
-        role: data.role,
-        content: data.content,
-        intent: data.intent ?? null,
-        planJson: data.planJson ?? null,
-        requiresConfirmation: data.requiresConfirmation ? 1 : 0,
-        selectedSelector: selectedElement?.selector.slice(0, 2_000) ?? null,
-        selectedLabel: selectedElement?.label?.slice(0, 500) ?? null,
-        selectedElementTag: selectedElement?.elementTag?.slice(0, 80) ?? null,
-        selectedElementText: selectedElement?.elementText?.slice(0, 2_000) ?? null,
-        createdAt: data.createdAt
-      })
-      .run()
+  async createHtmlEditMessage(data: CreateHtmlEditMessageInput): Promise<void> {
+    return this.htmlEditorRepository.createMessage(data)
   }
 
-  async listHtmlEditMessages(docId: string, limit = 100): Promise<HtmlEditMessage[]> {
-    const safeLimit = Math.max(1, Math.min(Math.floor(limit), 500))
-    const rows = await this.db
-      .select()
-      .from(schema.htmlEditMessages)
-      .where(eq(schema.htmlEditMessages.docId, docId))
-      .orderBy(desc(schema.htmlEditMessages.createdAt))
-      .limit(safeLimit)
-      .all()
-    return rows.reverse()
+  async listHtmlEditMessages(docId: string, limit = 100) {
+    return this.htmlEditorRepository.listMessages(docId, limit)
   }
 
   async clearHtmlEditMessages(docId: string): Promise<void> {
-    await this.db
-      .delete(schema.htmlEditMessages)
-      .where(eq(schema.htmlEditMessages.docId, docId))
-      .run()
+    return this.htmlEditorRepository.clearMessages(docId)
   }
 
-  async createHtmlEditVersion(data: {
-    id: string
-    docId: string
-    commitSha: string
-    message: string
-    createdAt: number
-  }): Promise<void> {
-    await this.db.insert(schema.htmlEditVersions).values({
-      id: data.id,
-      docId: data.docId,
-      commitSha: data.commitSha,
-      message: data.message,
-      createdAt: data.createdAt
-    })
+  async createHtmlEditVersion(data: CreateHtmlEditVersionInput): Promise<void> {
+    return this.htmlEditorRepository.createVersion(data)
   }
 
-  async createHtmlEditDocumentWithVersion(data: {
-    document: {
-      id: string
-      title: string
-      sourcePath?: string | null
-      htmlPath: string
-      designWidth: number
-      createdAt: number
-      updatedAt: number
-    }
-    version: {
-      id: string
-      commitSha: string
-      message: string
-      createdAt: number
-    }
-  }): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      await tx.insert(schema.htmlEditDocuments).values({
-        id: data.document.id,
-        title: data.document.title,
-        sourcePath: data.document.sourcePath ?? null,
-        htmlPath: data.document.htmlPath,
-        designWidth: data.document.designWidth,
-        createdAt: data.document.createdAt,
-        updatedAt: data.document.updatedAt
-      })
-      await tx.insert(schema.htmlEditVersions).values({
-        id: data.version.id,
-        docId: data.document.id,
-        commitSha: data.version.commitSha,
-        message: data.version.message,
-        createdAt: data.version.createdAt
-      })
-    })
+  async createHtmlEditDocumentWithVersion(
+    data: CreateHtmlEditDocumentWithVersionInput
+  ): Promise<void> {
+    return this.htmlEditorRepository.createDocumentWithVersion(data)
   }
 
-  async createHtmlEditVersionAndTouch(data: {
-    id: string
-    docId: string
-    commitSha: string
-    message: string
-    createdAt: number
-  }): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      await tx.insert(schema.htmlEditVersions).values({
-        id: data.id,
-        docId: data.docId,
-        commitSha: data.commitSha,
-        message: data.message,
-        createdAt: data.createdAt
-      })
-      await tx
-        .update(schema.htmlEditDocuments)
-        .set({ updatedAt: data.createdAt })
-        .where(eq(schema.htmlEditDocuments.id, data.docId))
-    })
+  async createHtmlEditVersionAndTouch(data: CreateHtmlEditVersionInput): Promise<void> {
+    return this.htmlEditorRepository.createVersionAndTouch(data)
   }
 
-  async listHtmlEditVersions(docId: string): Promise<HtmlEditVersion[]> {
-    return this.db
-      .select()
-      .from(schema.htmlEditVersions)
-      .where(eq(schema.htmlEditVersions.docId, docId))
-      .orderBy(desc(schema.htmlEditVersions.createdAt))
+  async listHtmlEditVersions(docId: string) {
+    return this.htmlEditorRepository.listVersions(docId)
   }
 
-  async getHtmlEditVersion(versionId: string): Promise<HtmlEditVersion | undefined> {
-    const rows = await this.db
-      .select()
-      .from(schema.htmlEditVersions)
-      .where(eq(schema.htmlEditVersions.id, versionId))
-      .limit(1)
-    return rows[0]
+  async getHtmlEditVersion(versionId: string) {
+    return this.htmlEditorRepository.getVersion(versionId)
   }
 
-  async listHtmlEditDocuments(): Promise<HtmlEditDocument[]> {
-    return this.db
-      .select()
-      .from(schema.htmlEditDocuments)
-      .orderBy(desc(schema.htmlEditDocuments.updatedAt))
+  async listHtmlEditDocuments() {
+    return this.htmlEditorRepository.listDocuments()
   }
 
-  async getHtmlEditDocument(docId: string): Promise<HtmlEditDocument | undefined> {
-    const rows = await this.db
-      .select()
-      .from(schema.htmlEditDocuments)
-      .where(eq(schema.htmlEditDocuments.id, docId))
-      .limit(1)
-    return rows[0]
+  async getHtmlEditDocument(docId: string) {
+    return this.htmlEditorRepository.getDocument(docId)
   }
 
   /** 删除文档的数据库记录（含版本行）。不删磁盘文件——文件留存供审计/恢复。 */
   async deleteHtmlEditDocument(docId: string): Promise<void> {
-    await this.db.delete(schema.htmlEditVersions).where(eq(schema.htmlEditVersions.docId, docId))
-    await this.db.delete(schema.htmlEditDocuments).where(eq(schema.htmlEditDocuments.id, docId))
+    return this.htmlEditorRepository.deleteDocument(docId)
   }
 
   // ========== Session ==========
@@ -841,11 +413,7 @@ export class PPTDatabase {
       .set({ title, updatedAt })
       .where(eq(schema.sessions.id, sessionId))
       .run()
-    await this.db
-      .update(schema.projects)
-      .set({ title, updatedAt })
-      .where(eq(schema.projects.sessionId, sessionId))
-      .run()
+    await this.projectRepository.updateTitleForSession(sessionId, title, updatedAt)
   }
 
   async updateSessionStyleId(sessionId: string, styleId: string): Promise<void> {
@@ -2658,264 +2226,67 @@ export class PPTDatabase {
   }
 
   async getSetting<T>(key: string): Promise<T | undefined> {
-    const result = await this.db
-      .select({ value: schema.settings.value })
-      .from(schema.settings)
-      .where(eq(schema.settings.key, key))
-      .get()
-    if (!result) return undefined
-    try {
-      return JSON.parse(result.value) as T
-    } catch {
-      return result.value as T
-    }
+    return this.configRepository.getSetting<T>(key)
   }
 
   async setSetting<T>(key: string, value: T): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    await this.db
-      .insert(schema.settings)
-      .values({ key, value: JSON.stringify(value), updatedAt: now })
-      .onConflictDoUpdate({
-        target: schema.settings.key,
-        set: { value: JSON.stringify(value), updatedAt: now }
-      })
-      .run()
+    return this.configRepository.setSetting(key, value)
   }
 
   async getAllSettings(): Promise<Record<string, unknown>> {
-    const results = await this.db.select().from(schema.settings).all()
-    const result: Record<string, unknown> = {}
-    for (const row of results) {
-      try {
-        result[row.key] = JSON.parse(row.value)
-      } catch {
-        result[row.key] = row.value
-      }
-    }
-    return result
+    return this.configRepository.getAllSettings()
   }
 
   // ========== Model Configs ==========
 
   async listModelConfigs(): Promise<ModelConfigRow[]> {
-    const results = await this.db
-      .select()
-      .from(schema.modelConfigs)
-      .orderBy(desc(schema.modelConfigs.active), desc(schema.modelConfigs.updatedAt))
-      .all()
-    return results as unknown as ModelConfigRow[]
+    return this.configRepository.listModelConfigs()
   }
 
   async getActiveModelConfig(): Promise<ModelConfigRow | undefined> {
-    const result = await this.db
-      .select()
-      .from(schema.modelConfigs)
-      .where(eq(schema.modelConfigs.active, 1))
-      .limit(1)
-      .get()
-    return result as unknown as ModelConfigRow | undefined
+    return this.configRepository.getActiveModelConfig()
   }
 
   async getModelConfig(id: string): Promise<ModelConfigRow | undefined> {
-    const result = await this.db
-      .select()
-      .from(schema.modelConfigs)
-      .where(eq(schema.modelConfigs.id, id))
-      .limit(1)
-      .get()
-    return result as unknown as ModelConfigRow | undefined
+    return this.configRepository.getModelConfig(id)
   }
 
-  async upsertModelConfig(data: {
-    id?: string
-    name: string
-    provider: string
-    model: string
-    apiKey: string
-    baseUrl: string
-    maxTokens?: number
-    disableTemperature?: boolean
-    thinkingParameterMode?: string
-    active?: boolean
-  }): Promise<string> {
-    const id = data.id || crypto.randomUUID()
-    const now = Math.floor(Date.now() / 1000)
-    const maxTokens = data.maxTokens || 4096
-    const disableTemperature = data.disableTemperature ? 1 : 0
-    const thinkingParameterMode = normalizeThinkingParameterMode(data.thinkingParameterMode)
-    if (data.active) {
-      await this.db
-        .update(schema.modelConfigs)
-        .set({ active: 0, updatedAt: now })
-        .where(eq(schema.modelConfigs.active, 1))
-        .run()
-    }
-    await this.db
-      .insert(schema.modelConfigs)
-      .values({
-        id,
-        name: data.name,
-        provider: data.provider,
-        model: data.model,
-        apiKey: data.apiKey,
-        baseUrl: data.baseUrl,
-        maxTokens,
-        disableTemperature,
-        thinkingParameterMode,
-        active: data.active ? 1 : 0,
-        createdAt: now,
-        updatedAt: now
-      })
-      .onConflictDoUpdate({
-        target: schema.modelConfigs.id,
-        set: {
-          name: data.name,
-          provider: data.provider,
-          model: data.model,
-          apiKey: data.apiKey,
-          baseUrl: data.baseUrl,
-          maxTokens,
-          disableTemperature,
-          thinkingParameterMode,
-          active: data.active ? 1 : 0,
-          updatedAt: now
-        }
-      })
-      .run()
-    return id
+  async upsertModelConfig(data: UpsertModelConfigInput): Promise<string> {
+    return this.configRepository.upsertModelConfig(data)
   }
 
   async setActiveModelConfig(id: string): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    const existing = await this.db
-      .select()
-      .from(schema.modelConfigs)
-      .where(eq(schema.modelConfigs.id, id))
-      .get()
-    if (!existing) throw new Error('Model config does not exist')
-    await this.db
-      .update(schema.modelConfigs)
-      .set({ active: 0, updatedAt: now })
-      .where(eq(schema.modelConfigs.active, 1))
-      .run()
-    await this.db
-      .update(schema.modelConfigs)
-      .set({ active: 1, updatedAt: now })
-      .where(eq(schema.modelConfigs.id, id))
-      .run()
+    return this.configRepository.setActiveModelConfig(id)
   }
 
   async deleteModelConfig(id: string): Promise<void> {
-    const existing = await this.db
-      .select()
-      .from(schema.modelConfigs)
-      .where(eq(schema.modelConfigs.id, id))
-      .get()
-    if (!existing) throw new Error('Model config does not exist')
-    await this.db.delete(schema.modelConfigs).where(eq(schema.modelConfigs.id, id)).run()
+    return this.configRepository.deleteModelConfig(id)
   }
 
   // ========== Image Model Configs ==========
 
   async listImageModelConfigs(): Promise<ImageModelConfigRow[]> {
-    const results = await this.db
-      .select()
-      .from(schema.imageModelConfigs)
-      .orderBy(desc(schema.imageModelConfigs.active), desc(schema.imageModelConfigs.updatedAt))
-      .all()
-    return results as unknown as ImageModelConfigRow[]
+    return this.configRepository.listImageModelConfigs()
   }
 
   async getActiveImageModelConfig(): Promise<ImageModelConfigRow | undefined> {
-    const result = await this.db
-      .select()
-      .from(schema.imageModelConfigs)
-      .where(eq(schema.imageModelConfigs.active, 1))
-      .limit(1)
-      .get()
-    return result as unknown as ImageModelConfigRow | undefined
+    return this.configRepository.getActiveImageModelConfig()
   }
 
   async getImageModelConfig(id: string): Promise<ImageModelConfigRow | undefined> {
-    const result = await this.db
-      .select()
-      .from(schema.imageModelConfigs)
-      .where(eq(schema.imageModelConfigs.id, id))
-      .limit(1)
-      .get()
-    return result as unknown as ImageModelConfigRow | undefined
+    return this.configRepository.getImageModelConfig(id)
   }
 
-  async upsertImageModelConfig(data: {
-    id?: string
-    name: string
-    provider: string
-    modelConfig: string
-    active?: boolean
-  }): Promise<string> {
-    const id = data.id || crypto.randomUUID()
-    const now = Math.floor(Date.now() / 1000)
-    if (data.active) {
-      await this.db
-        .update(schema.imageModelConfigs)
-        .set({ active: 0, updatedAt: now })
-        .where(eq(schema.imageModelConfigs.active, 1))
-        .run()
-    }
-    await this.db
-      .insert(schema.imageModelConfigs)
-      .values({
-        id,
-        name: data.name,
-        provider: data.provider,
-        modelConfig: data.modelConfig,
-        active: data.active ? 1 : 0,
-        createdAt: now,
-        updatedAt: now
-      })
-      .onConflictDoUpdate({
-        target: schema.imageModelConfigs.id,
-        set: {
-          name: data.name,
-          provider: data.provider,
-          modelConfig: data.modelConfig,
-          active: data.active ? 1 : 0,
-          updatedAt: now
-        }
-      })
-      .run()
-    return id
+  async upsertImageModelConfig(data: UpsertImageModelConfigInput): Promise<string> {
+    return this.configRepository.upsertImageModelConfig(data)
   }
 
   async setActiveImageModelConfig(id: string): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    const existing = await this.db
-      .select()
-      .from(schema.imageModelConfigs)
-      .where(eq(schema.imageModelConfigs.id, id))
-      .get()
-    if (!existing) throw new Error('Image model config does not exist')
-    await this.db
-      .update(schema.imageModelConfigs)
-      .set({ active: 0, updatedAt: now })
-      .where(eq(schema.imageModelConfigs.active, 1))
-      .run()
-    await this.db
-      .update(schema.imageModelConfigs)
-      .set({ active: 1, updatedAt: now })
-      .where(eq(schema.imageModelConfigs.id, id))
-      .run()
+    return this.configRepository.setActiveImageModelConfig(id)
   }
 
   async deleteImageModelConfig(id: string): Promise<void> {
-    const existing = await this.db
-      .select()
-      .from(schema.imageModelConfigs)
-      .where(eq(schema.imageModelConfigs.id, id))
-      .get()
-    if (!existing) throw new Error('Image model config does not exist')
-    await this.db.delete(schema.imageModelConfigs).where(eq(schema.imageModelConfigs.id, id)).run()
+    return this.configRepository.deleteImageModelConfig(id)
   }
 
   // ========== Image Generation Histories ==========
@@ -2924,195 +2295,45 @@ export class PPTDatabase {
     sessionId: string,
     pageId: string
   ): Promise<ImageGenerationHistoryRow[]> {
-    const results = await this.db
-      .select()
-      .from(schema.imageGenerationHistories)
-      .where(
-        and(
-          eq(schema.imageGenerationHistories.sessionId, sessionId),
-          eq(schema.imageGenerationHistories.pageId, pageId)
-        )
-      )
-      .orderBy(desc(schema.imageGenerationHistories.createdAt))
-      .limit(50)
-      .all()
-    return results as unknown as ImageGenerationHistoryRow[]
+    return this.imageGenerationHistoryRepository.listByPage(sessionId, pageId)
   }
 
-  async insertImageGenerationHistory(data: {
-    id?: string
-    sessionId: string
-    pageId: string
-    prompt: string
-    imagePaths: string[]
-    modelConfigId: string
-    provider: string
-    model: string
-    createdAt?: number
-  }): Promise<string> {
-    const id = data.id || crypto.randomUUID()
-    await this.db
-      .insert(schema.imageGenerationHistories)
-      .values({
-        id,
-        sessionId: data.sessionId,
-        pageId: data.pageId,
-        prompt: data.prompt,
-        imagePaths: JSON.stringify(data.imagePaths),
-        modelConfigId: data.modelConfigId,
-        provider: data.provider,
-        model: data.model,
-        createdAt: data.createdAt || Math.floor(Date.now() / 1000)
-      })
-      .run()
-    return id
+  async insertImageGenerationHistory(data: InsertImageGenerationHistoryInput): Promise<string> {
+    return this.imageGenerationHistoryRepository.insert(data)
   }
 
   // ========== Preferences ==========
 
-  async getActiveUserPreferences(): Promise<UserPreference[]> {
-    const results = await this.db
-      .select()
-      .from(schema.userPreferences)
-      .where(gt(schema.userPreferences.confidence, 0.3))
-      .orderBy(desc(schema.userPreferences.confidence), desc(schema.userPreferences.lastUsedAt))
-      .limit(10)
-      .all()
-
-    return results.map((r) => ({
-      key: r.key,
-      value: JSON.parse(r.value),
-      confidence: r.confidence,
-      source_sessions: r.sourceSessions ? JSON.parse(r.sourceSessions) : [],
-      created_at: r.createdAt,
-      updated_at: r.updatedAt,
-      last_used_at: r.lastUsedAt
-    })) as unknown as UserPreference[]
+  async getActiveUserPreferences(): Promise<UserPreferenceRecord[]> {
+    return this.userPreferenceRepository.listActive()
   }
 
   async upsertPreference(
     key: string,
-    data: { value: unknown; confidence?: number; sourceSessions?: string[] }
+    data: UpsertUserPreferenceInput
   ): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    const existing = await this.db
-      .select()
-      .from(schema.userPreferences)
-      .where(eq(schema.userPreferences.key, key))
-      .get()
-
-    if (existing) {
-      const existingSources = existing.sourceSessions ? JSON.parse(existing.sourceSessions) : []
-      const newSources = data.sourceSessions
-        ? [...new Set([...existingSources, ...data.sourceSessions])]
-        : existingSources
-      const baseConfidence = existing.confidence ?? 0.5
-      const increment = (data.confidence ?? 0.5) * 0.3
-      const newConfidence = Math.min(1.0, baseConfidence + increment)
-
-      await this.db
-        .update(schema.userPreferences)
-        .set({
-          value: JSON.stringify(data.value),
-          confidence: newConfidence,
-          sourceSessions: JSON.stringify(newSources),
-          updatedAt: now,
-          lastUsedAt: now
-        })
-        .where(eq(schema.userPreferences.key, key))
-        .run()
-    } else {
-      await this.db
-        .insert(schema.userPreferences)
-        .values({
-          key,
-          value: JSON.stringify(data.value),
-          confidence: data.confidence || 0.5,
-          sourceSessions: JSON.stringify(data.sourceSessions || []),
-          createdAt: now,
-          updatedAt: now,
-          lastUsedAt: now
-        })
-        .run()
-    }
+    return this.userPreferenceRepository.upsert(key, data)
   }
 
   async decayPreferences(): Promise<void> {
-    await this.db
-      .update(schema.userPreferences)
-      .set({ confidence: sql`${schema.userPreferences.confidence} * 0.95` })
-      .where(gt(schema.userPreferences.confidence, 0.1))
-      .run()
-
-    await this.db
-      .delete(schema.userPreferences)
-      .where(lte(schema.userPreferences.confidence, 0.1))
-      .run()
+    return this.userPreferenceRepository.decay()
   }
 
   // ========== Projects ==========
 
-  async createProject(data: {
-    session_id: string
-    title: string
-    output_path: string
-    root_path?: string | null
-  }): Promise<string> {
-    const id = crypto.randomUUID()
-    const now = Math.floor(Date.now() / 1000)
-
-    await this.db
-      .insert(schema.projects)
-      .values({
-        id,
-        sessionId: data.session_id,
-        title: data.title,
-        outputPath: data.output_path,
-        rootPath: data.root_path || data.output_path,
-        fileCount: 0,
-        totalSize: 0,
-        status: 'draft',
-        createdAt: now,
-        updatedAt: now
-      })
-      .run()
-
-    return id
+  async createProject(data: CreateProjectInput): Promise<string> {
+    return this.projectRepository.create(data)
   }
 
-  async getProject(sessionId: string): Promise<Project | undefined> {
-    const row = await this.db
-      .select({
-        id: schema.projects.id,
-        session_id: schema.projects.sessionId,
-        title: schema.projects.title,
-        output_path: schema.projects.outputPath,
-        root_path: schema.projects.rootPath,
-        file_count: schema.projects.fileCount,
-        total_size: schema.projects.totalSize,
-        status: schema.projects.status,
-        created_at: schema.projects.createdAt,
-        updated_at: schema.projects.updatedAt
-      })
-      .from(schema.projects)
-      .where(eq(schema.projects.sessionId, sessionId))
-      .orderBy(desc(schema.projects.createdAt))
-      .limit(1)
-      .get()
-
-    return row as Project | undefined
+  async getProject(sessionId: string): Promise<ProjectRecord | undefined> {
+    return this.projectRepository.getLatestForSession(sessionId)
   }
 
   async updateProjectStatus(
     projectId: string,
-    status: 'draft' | 'published' | 'exported'
+    status: ProjectStatus
   ): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    await this.db
-      .update(schema.projects)
-      .set({ status, updatedAt: now })
-      .where(eq(schema.projects.id, projectId))
-      .run()
+    return this.projectRepository.updateStatus(projectId, status)
   }
 
   // ========== Styles ==========
@@ -3410,18 +2631,7 @@ export class PPTDatabase {
     resourceId: string,
     variant = 'default'
   ): Promise<ThumbnailRecord | undefined> {
-    const row = await this.db
-      .select()
-      .from(schema.thumbnails)
-      .where(
-        and(
-          eq(schema.thumbnails.resourceType, resourceType),
-          eq(schema.thumbnails.resourceId, resourceId),
-          eq(schema.thumbnails.variant, variant)
-        )
-      )
-      .get()
-    return row as ThumbnailRecord | undefined
+    return this.thumbnailRepository.get(resourceType, resourceId, variant)
   }
 
   async getThumbnailRecords(
@@ -3429,130 +2639,26 @@ export class PPTDatabase {
     resourceIds: string[],
     variant = 'default'
   ): Promise<ThumbnailRecord[]> {
-    const ids = Array.from(
-      new Set(resourceIds.map((id) => String(id || '').trim()).filter(Boolean))
-    )
-    if (ids.length === 0) return []
-    const rows = await this.db
-      .select()
-      .from(schema.thumbnails)
-      .where(
-        and(
-          eq(schema.thumbnails.resourceType, resourceType),
-          inArray(schema.thumbnails.resourceId, ids),
-          eq(schema.thumbnails.variant, variant)
-        )
-      )
-      .all()
-    return rows as ThumbnailRecord[]
+    return this.thumbnailRepository.getMany(resourceType, resourceIds, variant)
   }
 
-  async upsertThumbnailRecord(data: {
-    resourceType: HtmlThumbnailResourceType
-    resourceId: string
-    variant: string
-    sourcePath: string
-    sourceMtimeMs: number
-    signature: string
-    thumbnailPath: string
-    status: ThumbnailStatus
-    error?: string | null
-  }): Promise<void> {
-    const now = Date.now()
-    const key = crypto
-      .createHash('sha256')
-      .update(
-        JSON.stringify({
-          resourceType: data.resourceType,
-          resourceId: data.resourceId,
-          variant: data.variant
-        })
-      )
-      .digest('hex')
-      .slice(0, 32)
-    await this.db
-      .insert(schema.thumbnails)
-      .values({
-        key,
-        resourceType: data.resourceType,
-        resourceId: data.resourceId,
-        variant: data.variant,
-        sourcePath: data.sourcePath,
-        sourceMtimeMs: data.sourceMtimeMs,
-        signature: data.signature,
-        thumbnailPath: data.thumbnailPath,
-        status: data.status,
-        error: data.error || null,
-        createdAt: now,
-        updatedAt: now
-      })
-      .onConflictDoUpdate({
-        target: schema.thumbnails.key,
-        set: {
-          sourcePath: data.sourcePath,
-          sourceMtimeMs: data.sourceMtimeMs,
-          signature: data.signature,
-          thumbnailPath: data.thumbnailPath,
-          status: data.status,
-          error: data.error || null,
-          updatedAt: now
-        }
-      })
-      .run()
+  async upsertThumbnailRecord(data: UpsertThumbnailRecordInput): Promise<void> {
+    return this.thumbnailRepository.upsert(data)
   }
 
   async failInterruptedThumbnailTasks(): Promise<void> {
-    await this.db
-      .update(schema.thumbnails)
-      .set({
-        status: 'failed',
-        error: '应用退出时任务尚未完成',
-        updatedAt: Date.now()
-      })
-      .where(inArray(schema.thumbnails.status, ['queued', 'running']))
-      .run()
+    return this.thumbnailRepository.failInterruptedTasks()
   }
 
   async getSessionStyleSnapshot(sessionId: string): Promise<SessionStyleSnapshotRow | undefined> {
-    const row = await this.db
-      .select()
-      .from(schema.sessionStyleSnapshots)
-      .where(eq(schema.sessionStyleSnapshots.sessionId, sessionId))
-      .get()
-    return row as unknown as SessionStyleSnapshotRow | undefined
+    return this.sessionStyleSnapshotRepository.get(sessionId)
   }
 
   async createSessionStyleSnapshot(
     sessionId: string,
     styleId?: string | null
   ): Promise<SessionStyleSnapshotRow> {
-    const style = this.resolveSnapshotStyleRow(styleId)
-    const now = Math.floor(Date.now() / 1000)
-    await this.db
-      .insert(schema.sessionStyleSnapshots)
-      .values({
-        id: crypto.randomUUID(),
-        sessionId,
-        styleId: style.id,
-        styleKey: style.style,
-        styleName: style.styleName,
-        styleNameZh: style.styleNameZh || style.styleName,
-        styleNameEn: style.styleNameEn || '',
-        description: style.description,
-        category: style.category,
-        aliases: style.aliases || '[]',
-        source: style.source,
-        version: normalizeStyleVersion(style.version),
-        styleCase: style.styleCase,
-        packageDir: style.packageDir || '',
-        styleSkill: style.styleSkill,
-        createdAt: now
-      })
-      .onConflictDoNothing({ target: schema.sessionStyleSnapshots.sessionId })
-      .run()
-    const existing = await this.getSessionStyleSnapshot(sessionId)
-    if (!existing) throw new Error('Session style snapshot was not created')
-    return existing
+    return this.sessionStyleSnapshotService.createFromCatalog(sessionId, styleId)
   }
 
   /**
@@ -3564,119 +2670,22 @@ export class PPTDatabase {
     sessionId: string,
     input: SessionStyleSnapshotInput
   ): Promise<SessionStyleSnapshotRow> {
-    const now = Math.floor(Date.now() / 1000)
-    const description = input.description?.trim() || ''
-    const styleSkill = input.styleSkill.trim() || description
-    await this.db
-      .insert(schema.sessionStyleSnapshots)
-      .values({
-        id: crypto.randomUUID(),
-        sessionId,
-        styleId: input.styleId,
-        styleKey: input.styleKey,
-        styleName: input.styleName,
-        styleNameZh: input.styleNameZh || input.styleName,
-        styleNameEn: input.styleNameEn || '',
-        description,
-        category: input.category || 'custom',
-        aliases: input.aliases || '[]',
-        source: input.source || 'custom',
-        version: normalizeStyleVersion(input.version || '1.0.0'),
-        styleCase: input.styleCase || '',
-        packageDir: input.packageDir || '',
-        styleSkill,
-        createdAt: now
-      })
-      .onConflictDoNothing({ target: schema.sessionStyleSnapshots.sessionId })
-      .run()
-    const existing = await this.getSessionStyleSnapshot(sessionId)
-    if (!existing) throw new Error('Custom session style snapshot was not created')
-    return existing
+    return this.sessionStyleSnapshotService.createCustom(sessionId, input)
   }
 
   async replaceSessionStyleSnapshot(
     sessionId: string,
     styleId?: string | null
   ): Promise<SessionStyleSnapshotRow> {
-    await this.db
-      .delete(schema.sessionStyleSnapshots)
-      .where(eq(schema.sessionStyleSnapshots.sessionId, sessionId))
-      .run()
-    return this.createSessionStyleSnapshot(sessionId, styleId)
+    return this.sessionStyleSnapshotService.replaceFromCatalog(sessionId, styleId)
   }
 
   async getOrCreateSessionStyleSnapshot(sessionId: string): Promise<SessionStyleSnapshotRow> {
-    const existing = await this.getSessionStyleSnapshot(sessionId)
-    if (existing) return existing
-    const session = await this.getSession(sessionId)
-    const metadata = parseSessionMetadata(session?.metadata)
-    const selection = metadata.styleSelection
-    if (
-      selection &&
-      typeof selection === 'object' &&
-      !Array.isArray(selection) &&
-      (selection as Record<string, unknown>).mode === 'ai'
-    ) {
-      const description = String((selection as Record<string, unknown>).description || '').trim()
-      if (description) {
-        const themeColors = Array.isArray((selection as Record<string, unknown>).themeColors)
-          ? ((selection as Record<string, unknown>).themeColors as unknown[])
-              .map((item) => String(item || '').trim())
-              .filter(Boolean)
-          : []
-        const styleId = session?.styleId || `ai-${sessionId}`
-        const styleKeySuffix = sessionId.replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'session'
-        return this.createCustomSessionStyleSnapshot(sessionId, {
-          styleId,
-          styleKey: `ai-generated-${styleKeySuffix}`,
-          styleName: 'AI-generated style',
-          styleNameZh: 'AI 自定义风格',
-          styleNameEn: 'AI-generated style',
-          description,
-          category: 'ai-generated',
-          aliases: JSON.stringify(['ai', 'custom']),
-          source: 'custom',
-          version: '1.0.0',
-          styleSkill: [
-            '# Session-specific AI-generated visual style',
-            `User style direction: ${description}`,
-            `Theme color anchors: ${themeColors.join(', ') || 'derive from the direction and content.'}`,
-            'Derive typography, palette roles, shape language, image direction, composition, whitespace, charts, and decoration from the current topic, prompt, content, requirements, and reference/template. Keep this exact session style consistent across generation, retries, and edits. Do not replace it with a built-in preset.'
-          ].join('\n')
-        })
-      }
-    }
-    return this.createSessionStyleSnapshot(sessionId, session?.styleId)
+    return this.sessionStyleSnapshotService.getOrCreate(sessionId)
   }
 
   async copySessionStyleSnapshot(sourceSessionId: string, targetSessionId: string): Promise<void> {
-    const source = await this.getOrCreateSessionStyleSnapshot(sourceSessionId)
-    await this.db
-      .delete(schema.sessionStyleSnapshots)
-      .where(eq(schema.sessionStyleSnapshots.sessionId, targetSessionId))
-      .run()
-    await this.db
-      .insert(schema.sessionStyleSnapshots)
-      .values({
-        id: crypto.randomUUID(),
-        sessionId: targetSessionId,
-        styleId: source.styleId,
-        styleKey: source.styleKey,
-        styleName: source.styleName,
-        styleNameZh: source.styleNameZh || source.styleName,
-        styleNameEn: source.styleNameEn || '',
-        description: source.description,
-        category: source.category,
-        aliases: source.aliases,
-        source: source.source,
-        version: normalizeStyleVersion(source.version),
-        styleCase: source.styleCase,
-        packageDir: source.packageDir || '',
-        styleSkill: source.styleSkill,
-        createdAt: Math.floor(Date.now() / 1000)
-      })
-      .onConflictDoNothing({ target: schema.sessionStyleSnapshots.sessionId })
-      .run()
+    return this.sessionStyleSnapshotService.copy(sourceSessionId, targetSessionId)
   }
 
   async backfillSessionStyleSnapshots(): Promise<{

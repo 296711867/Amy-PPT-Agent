@@ -700,9 +700,16 @@ describe('preview text hit selection', () => {
       path.resolve(__dirname, '../../../src/renderer/src/components/preview/PreviewIframe.tsx'),
       'utf-8'
     )
+    const webviewUtils = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        '../../../src/renderer/src/components/presentation-webview/webview-utils.ts'
+      ),
+      'utf-8'
+    )
     expect(source).not.toContain('preview-click-animation')
-    expect(source).toContain("url.searchParams.set('pptPlayback', '0')")
-    expect(source).toContain("url.searchParams.set('print', '1')")
+    expect(webviewUtils).toContain("url.searchParams.set('pptPlayback', '0')")
+    expect(webviewUtils).toContain("url.searchParams.set('print', '1')")
   })
 
   it('inspector selects the inline span under the text caret point', () => {

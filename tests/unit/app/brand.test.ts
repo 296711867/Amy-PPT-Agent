@@ -49,7 +49,7 @@ describe('Amy-PPT brand contract', () => {
     })
     expect(updateManifest).toMatchObject({
       version: '1.0.4',
-      downloadhome: 'https://github.com/296711867/Amy-PPT/releases'
+      downloadhome: 'https://github.com/296711867/Amy-PPT-Agent/releases'
     })
   })
 

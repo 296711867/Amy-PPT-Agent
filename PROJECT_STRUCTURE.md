@@ -7,6 +7,19 @@
 - `src/shared/`: Cross-process types, contracts, layout catalogs, error models, and shared constants.
 - `resources/`: Packaged runtime assets, fonts, product skills, style packages, presentation runtimes, and Amy-PPT brand assets.
 
+## Main-Process Module Map
+
+- `src/main/db/`: persistence facade plus split layers. `schema.ts` holds Drizzle tables, `records.ts` holds row/union types, `repositories/` holds per-domain CRUD classes, `services/` holds cross-repository business logic, and `database.ts` (`PPTDatabase`) remains the single facade every caller imports. Historical migrations stay in `db/patch/`.
+- `src/main/generation/planning/`: LLM planning extracted from the runner — deck/page planners, the design-contract builder, and model JSON response parsing (`model-response.ts`). `agent-runner.ts` re-exports the planner entry points, so existing imports keep working.
+- `src/main/generation/agent-stream-processor.ts`: shared deepagent stream-loop handling (tool-event logging, custom `deck_tool_status` chunks, final assistant text).
+
+## Renderer Module Map
+
+- `src/renderer/src/components/session-detail/`: the session detail page component tree (hooks, ai-panel, workspace, preview, sidebar, browse, style, speech, toolbar, modal, element-inspector, shared). `pages/session-detail.tsx` only assembles these pieces.
+- `src/renderer/src/components/presentation-webview/`: preview URL construction and webview runtime injection shared by `PreviewIframe` and `HtmlEditorCanvas` (`webview-utils.ts`, `usePresentationWebviewRuntime.ts`).
+
+Source-contract tests under `tests/unit/` read these files as text; when moving code between modules, update the paths they read in the same change.
+
 ## Development And Release
 
 - `tests/unit/`: Vitest regression tests grouped by functional domain.

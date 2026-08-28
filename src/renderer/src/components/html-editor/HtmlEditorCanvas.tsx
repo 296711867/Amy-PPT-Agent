@@ -29,6 +29,12 @@ import { useHtmlEditorStore } from '../../store/htmlEditorStore'
 import { Button } from '../ui/Button'
 import { useWebviewLoadError } from '../../hooks/useWebviewLoadError'
 import {
+  applyPreviewUrlParams,
+  resolvePageHtmlPath,
+  toPreviewFileUrl
+} from '../presentation-webview/webview-utils'
+import { usePresentationWebviewRuntime } from '../presentation-webview/usePresentationWebviewRuntime'
+import {
   HtmlEditorGuidesOverlay,
   type GuidesSnapBridge,
   EDITOR_INSET
@@ -205,13 +211,19 @@ export const HtmlEditorCanvas = forwardRef<
 ) {
   const t = useT()
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const webviewRef = useRef<Electron.WebviewTag | null>(null)
-  const webviewReadyRef = useRef(false)
   const inspectorInjectedRef = useRef(false)
   const editModeInjectedRef = useRef(false)
   const previewScaleRef = useRef(1)
-  const [webviewElement, setWebviewElement] = useState<Electron.WebviewTag | null>(null)
-  const [webviewReady, setWebviewReady] = useState(false)
+  const {
+    webviewRef,
+    webviewElement,
+    webviewReady,
+    handleWebviewRef: handleRuntimeWebviewRef,
+    canExecuteJavaScript,
+    safeExecuteJavaScript,
+    safeExecuteHostScript,
+    waitForWebviewReady
+  } = usePresentationWebviewRuntime('HtmlEditorCanvas')
   const [transform, setTransform] = useState('scale(1)')
   const [previewScale, setPreviewScale] = useState(1)
   const [contentHeight, setContentHeight] = useState(720)
@@ -223,55 +235,14 @@ export const HtmlEditorCanvas = forwardRef<
     previewScaleRef.current = previewScale
   }, [previewScale])
 
-  const resolvePageHtmlPath = (inputPath?: string, currentPageId?: string): string | undefined => {
-    if (!inputPath) return undefined
-    const isIndex = /[\\/]index\.html?$/i.test(inputPath)
-    if (!isIndex) return inputPath
-    if (!currentPageId) return undefined
-    return inputPath.replace(/index\.html?$/i, `${currentPageId}.html`)
-  }
-
-  const encodePathSegments = (filePath: string): string =>
-    filePath
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/')
-
-  const applyPreviewUrlParams = (inputUrl: string): string => {
-    const url = new URL(inputUrl)
-    // HtmlEditorCanvas already scales the logical slide canvas into its viewport.
-    // Disable page-level auto-fit to avoid double-scaling on specific pages.
-    url.searchParams.set('fit', 'off')
-    // Preview surfaces are static. Only the full-screen presentation URL enables motion.
-    url.searchParams.set('print', '1')
-    url.searchParams.set('pptPlayback', '0')
-    if (thumbnail) {
-      url.searchParams.set('thumbnail', '1')
-      if (pageId) url.searchParams.set('pageId', pageId)
-    }
-    return url.toString()
-  }
-
-  const toFileUrl = (absolutePath: string): string => {
-    const normalizedPath = absolutePath.replace(/\\/g, '/')
-    const fileUrl = /^[a-zA-Z]:\//.test(normalizedPath)
-      ? `file:///${normalizedPath.slice(0, 2)}${encodePathSegments(normalizedPath.slice(2))}`
-      : normalizedPath.startsWith('/')
-        ? `file://${encodePathSegments(normalizedPath)}`
-        : `file:///${encodePathSegments(normalizedPath)}`
-    return applyPreviewUrlParams(fileUrl)
-  }
-
-  const withPreviewParams = (inputUrl: string): string => {
-    return applyPreviewUrlParams(inputUrl)
-  }
 
   // Always preview concrete page file (<pageId>.html). index.html is only for external full-deck preview.
   const pageHtmlPath = resolvePageHtmlPath(htmlPath, pageId)
+  const previewUrlOptions = { thumbnail, pageId }
   const webviewSrc = pageHtmlPath
-    ? toFileUrl(pageHtmlPath)
+    ? toPreviewFileUrl(pageHtmlPath, previewUrlOptions)
     : src
-      ? withPreviewParams(src)
+      ? applyPreviewUrlParams(src, previewUrlOptions)
       : undefined
   const webviewLoad = useWebviewLoadError(webviewElement, webviewSrc)
   const currentInteractionMode: InteractionMode =
@@ -341,59 +312,10 @@ export const HtmlEditorCanvas = forwardRef<
   }
 
   const handleWebviewRef = useCallback((node: Electron.WebviewTag | null): void => {
-    webviewReadyRef.current = false
     inspectorInjectedRef.current = false
     editModeInjectedRef.current = false
-    setWebviewReady(false)
-    webviewRef.current = node
-    setWebviewElement((prev) => (prev === node ? prev : node))
-  }, [])
-
-  const canExecuteJavaScript = (webview: Electron.WebviewTag): boolean => {
-    return webview.isConnected && webviewRef.current === webview && webviewReadyRef.current
-  }
-
-  const wrapSafeVoidScript = (label: string, script: string): string => `
-(() => {
-  try {
-    ${script}
-  } catch (error) {
-    const message = error && (error.stack || error.message || String(error));
-    console.error("[HtmlEditorCanvas:${label}]", message || "Unknown script error");
-  }
-})();
-`
-
-  const safeExecuteJavaScript = (webview: Electron.WebviewTag, script: string): void => {
-    if (!canExecuteJavaScript(webview)) return
-    try {
-      webview.executeJavaScript(wrapSafeVoidScript('void', script)).catch(() => {})
-    } catch {
-      // executeJavaScript may throw synchronously before dom-ready
-    }
-  }
-
-  const safeExecuteHostScript = (
-    webview: Electron.WebviewTag,
-    label: string,
-    script: string
-  ): void => {
-    if (!canExecuteJavaScript(webview)) return
-    try {
-      webview.executeJavaScript(wrapSafeVoidScript(label, script)).catch(() => {})
-    } catch {
-      // executeJavaScript may throw synchronously before dom-ready
-    }
-  }
-
-  const waitForWebviewReady = async (): Promise<Electron.WebviewTag | null> => {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const webview = webviewRef.current
-      if (webview && canExecuteJavaScript(webview)) return webview
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 50))
-    }
-    return null
-  }
+    handleRuntimeWebviewRef(node)
+  }, [handleRuntimeWebviewRef])
 
   useImperativeHandle(
     ref,
@@ -956,38 +878,6 @@ export const HtmlEditorCanvas = forwardRef<
     []
   )
 
-  useEffect(() => {
-    const webview = webviewElement
-    if (!webview) return
-
-    webviewReadyRef.current = false
-    setWebviewReady(false)
-
-    const markReady = (): void => {
-      if (webviewRef.current === webview) {
-        webviewReadyRef.current = true
-        setWebviewReady(true)
-      }
-    }
-    const handleStartLoading = (): void => {
-      if (webviewRef.current === webview) {
-        webviewReadyRef.current = false
-        setWebviewReady(false)
-      }
-    }
-
-    webview.addEventListener('dom-ready', markReady as EventListener)
-    webview.addEventListener('did-start-loading', handleStartLoading as EventListener)
-
-    return () => {
-      webview.removeEventListener('dom-ready', markReady as EventListener)
-      webview.removeEventListener('did-start-loading', handleStartLoading as EventListener)
-      if (webviewRef.current === webview) {
-        webviewReadyRef.current = false
-        setWebviewReady(false)
-      }
-    }
-  }, [webviewElement])
 
   // Selection overlay effect: handles AI inspect and animation-select.
   useEffect(() => {

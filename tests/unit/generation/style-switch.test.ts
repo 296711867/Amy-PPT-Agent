@@ -52,6 +52,7 @@ describe('style switch generation', () => {
       'utf8'
     )
     const databaseSource = fs.readFileSync(path.resolve('src/main/db/database.ts'), 'utf8')
+    const recordsSource = fs.readFileSync(path.resolve('src/main/db/records.ts'), 'utf8')
 
     expect(typesSource).toContain('const STYLE_SWITCH_CONCURRENCY = 2')
     expect(typesSource).toContain("jobType: 'style-switch'")
@@ -80,7 +81,7 @@ describe('style switch generation', () => {
     expect(flowSource).toContain("editScope: 'page'")
     expect(flowSource).toContain('pageFileMap: { [page.pageId]: page.htmlPath }')
     expect(serviceSource).not.toContain('executeDeckAllPageEditGeneration')
-    expect(databaseSource).toContain("| 'style-switch'")
+    expect(recordsSource).toContain("| 'style-switch'")
     expect(databaseSource).toContain('createGenerationRunWithSessionJobAndPages')
   })
 
