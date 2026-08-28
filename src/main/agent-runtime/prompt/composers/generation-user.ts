@@ -113,7 +113,7 @@ export function buildSinglePageGenerationPrompt(args: {
           ? '- The previous attempt dropped template skeleton resources. Reread the target template page, find the missing local asset references from the error, and include the corresponding background/decorative layers in the next write.'
           : '',
         shouldMentionHarnessFix
-          ? '- 上一次是 harness 质量校验未通过。逐条按错误清单修正，不要辩解、不要绕过：图标底托/图标位里的 emoji 必须换成内联 SVG（<svg>…</svg>）；内容区根容器水平 padding 必须达到下限（px-24 或更大，禁用 px-10/px-12/px-16/px-20）；显式字号不得低于当前画布下限（1600×900 画布正文 ≥18px、标题 ≥24px，其余画布按高度等比换算，text-[Npx] 与 text-xs/text-sm 等语义字号同样计入）；页脚/注释/来源等辅助小字必须放入 footer/small/figcaption 或标记 data-ppt-text-role="auxiliary"，且不得小于 12px。修正后重新调用写盘工具。'
+          ? '- 上一次是 harness 质量校验未通过。逐条按错误清单修正，不要辩解、不要绕过：图标底托/图标位里的 emoji 必须换成内联 SVG（<svg>…</svg>）；内容区根容器水平 padding 必须达到下限（px-24 或更大，禁用 px-10/px-12/px-16/px-20）；显式字号不得低于当前画布下限（1600×900 画布正文 ≥18px、标题 ≥24px，其余画布按高度等比换算，text-[Npx] 与 text-xs/text-sm 等语义字号同样计入）；页脚/注释/来源/眉标(kicker)等辅助小字必须放入 footer/small/figcaption 或标记 data-ppt-text-role="auxiliary"，且不得小于 12px；标题带 [data-role="title"] 内只有标题元素适用 24px 标题下限，副标题按正文 ≥18px，小于 18px 的眉标必须带辅助标记。修正后重新调用写盘工具。'
           : '',
         '- Before calling the write tool, mentally validate that the main containers are closed and that no tag is left unfinished at the end.',
         '- If the previous issue was unclosed tags, do not patch the broken fragment. Rewrite a simpler, shallower fragment from scratch: one root div, no page shell (section[data-page-scaffold], main[data-role="content"], or runtime frame), grid/flex direct children, aim for 3 nesting levels and avoid exceeding 4, fewer wrappers, fewer modules.',

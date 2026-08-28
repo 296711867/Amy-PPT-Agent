@@ -7,7 +7,7 @@ Runtime 侧除 Thinking 主链路外，仍存在少量"有意内联"的模型构
 
 | ID | Builder | Source | 用途 |
 | --- | --- | --- | --- |
-| `add-page-plan` | `planNewPage` | `src/main/generation/agent-runner.ts` | 追加单页前的大纲规划 |
+| `add-page-plan` | `planNewPage` | `src/main/generation/planning/page-planner.ts` | 追加单页前的大纲规划 |
 | `document-image-plan` | `buildImageDocumentPlanPrompt` | `src/main/io/document-parse-handlers.ts` | 源文档配图规划提示词 |
 | `style-import-json-repair` | `retryFixJson` | `src/main/styles/import/pptx.ts` | 风格导入 JSON 解析失败后的修复重试 |
 | `deck-background-plan` | `buildPromptPlan` | `src/main/generation/deck-backgrounds.ts` | PPT 背景图提示词成套规划 |

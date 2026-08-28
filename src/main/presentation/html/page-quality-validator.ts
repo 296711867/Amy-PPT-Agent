@@ -124,6 +124,68 @@ function parseExplicitFontSizePx(cls: string | undefined, style: string | undefi
   return inline ? Number.parseFloat(inline[1]) : null
 }
 
+/** Rule 3 与修复函数共用的文本元素选择器。 */
+const TEXT_FLOOR_SELECTOR = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,td,th,label,button,span'
+
+/** 画布字号下限：正文 18px、标题 24px（按 900 高度基准等比换算）。 */
+const resolveFontFloors = (slideSize: SlideSizePreset): { bodyFloorPx: number; headingFloorPx: number } => ({
+  bodyFloorPx: Math.round(18 * (slideSize.height / 900)),
+  headingFloorPx: Math.round(24 * (slideSize.height / 900))
+})
+
+export interface FontFloorFix {
+  locator: string
+  fromPx: number
+  toPx: number
+}
+
+/**
+ * 确定性修复：把低于画布字号下限的显式字号（text-[Npx]、text-xl 等语义档、
+ * 内联 font-size）抬高到对应下限。只处理会被 font-below-floor 拒绝的元素，
+ * 辅助标记文本照旧豁免——模型反复带出 text-xl 模块标题这类 web 习惯小字号时，
+ * 与其靠重试循环耗尽，不如落盘前机械抬到位。
+ */
+export function repairExplicitFontFloors(
+  html: string,
+  slideSize: SlideSizePreset
+): { html: string; fixes: FontFloorFix[] } {
+  const { bodyFloorPx, headingFloorPx } = resolveFontFloors(slideSize)
+  const $ = cheerio.load(html, { scriptingEnabled: false })
+  const fixes: FontFloorFix[] = []
+  $(TEXT_FLOOR_SELECTOR).each((_i, el) => {
+    const $el = $(el)
+    if ($el.closest('script,style,svg,canvas').length > 0) return
+    if (!$el.text().trim()) return
+    if ($el.closest(AUXILIARY_SELECTOR).length > 0) return
+    const cls = $el.attr('class') || ''
+    const style = $el.attr('style') || ''
+    const explicitPx = parseExplicitFontSizePx(cls, style)
+    if (explicitPx === null) return
+    const tag = ($el.prop('tagName') || '').toLowerCase()
+    const isHeading = /^h[1-6]$/.test(tag) || $el.attr('data-role') === 'title'
+    const floor = isHeading ? headingFloorPx : bodyFloorPx
+    if (explicitPx >= floor) return
+    const locator = elementLocator($el)
+    if (/(?:^|\s)text-\[\d+(?:\.\d+)?px\](?=\s|$)/.test(cls)) {
+      $el.attr('class', cls.replace(/text-\[\d+(?:\.\d+)?px\]/, `text-[${floor}px]`))
+    } else if (/(?:^|\s)text-(?:xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|8xl|9xl)(?=\s|$)/.test(cls)) {
+      $el.attr(
+        'class',
+        cls.replace(
+          /text-(?:xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|8xl|9xl)(?=\s|$)/,
+          `text-[${floor}px]`
+        )
+      )
+    } else if (/font-size\s*:\s*[\d.]+px/i.test(style)) {
+      $el.attr('style', style.replace(/font-size\s*:\s*[\d.]+px/i, `font-size: ${floor}px`))
+    } else {
+      return
+    }
+    fixes.push({ locator, fromPx: explicitPx, toPx: floor })
+  })
+  return { html: $.html(), fixes }
+}
+
 function elementLocator($el: cheerio.Cheerio<AnyNode>): string {
   const tag = ($el.prop('tagName') || 'div').toLowerCase()
   const cls = ($el.attr('class') || '').trim()
@@ -269,10 +331,8 @@ export function validatePageQuality(
   }
 
   // ---- Rule 3: 显式小字号 ----
-  const bodyFloorPx = Math.round(18 * (slideSize.height / 900))
-  const headingFloorPx = Math.round(24 * (slideSize.height / 900))
-  const textSelector = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,td,th,label,button,span'
-  $(textSelector).each((_i, el) => {
+  const { bodyFloorPx, headingFloorPx } = resolveFontFloors(slideSize)
+  $(TEXT_FLOOR_SELECTOR).each((_i, el) => {
     const $el = $(el)
     if ($el.closest('script,style,svg,canvas').length > 0) return
     if (!$el.text().trim()) return
@@ -280,7 +340,10 @@ export function validatePageQuality(
     const explicitPx = parseExplicitFontSizePx($el.attr('class'), $el.attr('style'))
     if (explicitPx === null) return
     const tag = ($el.prop('tagName') || '').toLowerCase()
-    const isHeading = /^h[1-6]$/.test(tag) || $el.closest('[data-role="title"]').length > 0
+    // 标题带 [data-role="title"] 内部常含 kicker/副标题等非标题文字，
+    // 只有标题元素本身（h1-h6 或带 data-role="title" 的元素）适用标题下限，
+    // 其余子元素按正文下限处理，避免把 22px 副标题误判成标题字号不足。
+    const isHeading = /^h[1-6]$/.test(tag) || $el.attr('data-role') === 'title'
     const floor = isHeading ? headingFloorPx : bodyFloorPx
     if (explicitPx >= floor) return
     violations.push({

@@ -16,8 +16,8 @@ describe('layout rules profile', () => {
     expect(prompt).toContain('### Web-layout failure check')
     expect(prompt).toContain('at most 3 primary content blocks')
     expect(prompt).toContain('10% left/right and 14% top/bottom')
-    expect(prompt).toContain('slide subtitle or whole-page lead about 26px')
-    expect(prompt).toContain('module second-level title about 24px')
+    expect(prompt).toContain('slide subtitle or whole-page lead about 28px')
+    expect(prompt).toContain('module second-level title about 28px')
     expect(prompt).toContain('64px while preserving usable width')
     expect(prompt).toContain('data-role="image-placeholder"')
     expect(prompt).toContain('## 专业 PPT 构图原则')
@@ -76,9 +76,9 @@ describe('layout rules profile', () => {
     })
 
     expect(widePrompt).toContain('160px left/right and 126px top/bottom')
-    expect(widePrompt).toContain('slide title about 40px')
+    expect(widePrompt).toContain('slide title about 48px')
     expect(standardPrompt).toContain('160px left/right and 168px top/bottom')
-    expect(standardPrompt).toContain('slide title about 53px')
+    expect(standardPrompt).toContain('slide title about 64px')
   })
 
   it('upgrades legacy fields and preserves an intentionally empty v3 editor', () => {
@@ -116,12 +116,12 @@ describe('layout rules profile', () => {
     // 改动 E：新增 Deck-level structural consistency 硬契约段
     expect(prompt).toContain('### Deck-level structural consistency')
     expect(prompt).toContain('硬契约')
-    // 留白/卡片/图标基准引用了 profile 数值（默认 safeArea 10/14、cardPadding 24、cardGap 24、iconBoxSize 52）
+    // 留白/卡片/图标基准引用了 profile 数值（默认 safeArea 10/14、cardPadding 32、cardGap 24、iconBoxSize 64）
     expect(prompt).toContain('10% 安全区')
     expect(prompt).toContain('14% 安全区')
-    expect(prompt).toContain('约 24px 内边距')
+    expect(prompt).toContain('约 32px 内边距')
     expect(prompt).toContain('24px 间距')
-    expect(prompt).toContain('约 52px 的圆形')
+    expect(prompt).toContain('约 64px 的圆形')
     // 形态同构 + 对齐基准
     expect(prompt).toContain('形态同构')
     expect(prompt).toContain('异构形态')

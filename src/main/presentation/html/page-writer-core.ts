@@ -1,11 +1,16 @@
 import fs from 'fs'
+import log from 'electron-log/main.js'
 import * as cheerio from 'cheerio'
 import type { AnyNode } from 'domhandler'
 import { SLIDE_SIZE_PRESETS, type SlideSizePreset } from '@shared/slide-size'
 import { isPlaceholderPageHtml, validateHtmlContent, validatePersistedPageHtml } from './html-utils'
 import { parseChartHeightClass, resolveChartHeightFromNearbyComment } from './chart-height'
 import { normalizeCreativePageFragment } from './page-fragment-normalizer'
-import { validatePageQuality, type QualityViolation } from './page-quality-validator'
+import {
+  repairExplicitFontFloors,
+  validatePageQuality,
+  type QualityViolation
+} from './page-quality-validator'
 import { replaceDataIcons } from '../icons/data-icon-replacer'
 import type { RenderedPageValidationResult } from './rendered-page-validator'
 import { extractRemoteRuntimeResources } from './resource-policy'
@@ -679,6 +684,18 @@ export async function persistPageHtmlFromFragment(args: {
   // data-icon 引用替换：把 <svg data-icon="id"/> 替换成真实 lucide SVG（全集 1683）。
   // 已知 id 注入 path，未知 id 保留原样由下方 validatePageQuality 的 unknown-icon-id 校验。
   const persisted = { ...persistedRaw, html: replaceDataIcons(persistedRaw.html).html }
+  // 字号下限确定性兜底：把低于画布下限的显式字号抬到下限，避免模型带出
+  // text-xl 模块标题这类 web 习惯小字号时整页重试耗尽。
+  const fontFloorRepair = repairExplicitFontFloors(persisted.html, args.slideSize)
+  if (fontFloorRepair.fixes.length > 0) {
+    persisted.html = fontFloorRepair.html
+    log.info('[page-writer] raised below-floor font sizes before validation', {
+      pageId: args.pageId,
+      fixes: fontFloorRepair.fixes
+        .slice(0, 8)
+        .map((fix) => `${fix.locator} ${fix.fromPx}px→${fix.toPx}px`)
+    })
+  }
   // Harness: 落盘前的质量校验。不达标抛 PageWriteValidationError，经 tool error
   // 回流到 agent 的 ReAct 循环，带违规清单触发自我重写，达标才落盘。
   const harnessViolations = validatePageQuality(persisted.html, args.slideSize)

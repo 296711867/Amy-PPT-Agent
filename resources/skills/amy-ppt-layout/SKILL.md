@@ -133,9 +133,8 @@ For chart slides, decide the chart role before choosing layout density:
 Titles are part of the reading path, not a fixed header decoration.
 
 - Cover/summary slides: title can be at visual center.
-- Data slides: title can be near a key number or beside the chart.
-- Comparison slides: title where it clarifies the contrast.
-- Within one deck, vary title position and card grid across consecutive pages.
+- Conventional content slides: keep one consistent title band across the whole deck — same alignment, same title size tier, same kicker/rule treatment, and the same title-to-content gap on every page.
+- Within one deck, vary the main visual, card grid, and content rhythm instead of the title position.
 - Vertical title text: only for short Chinese labels of 2–6 characters.
 - Titles with English, numbers, years, mixed text, or long phrases must be horizontal.
 - Module second-level titles are not extra page subtitles. Keep each one visually attached to its own body copy, use the same title/body gap across peers, and default to left alignment for multi-line modules.
@@ -176,7 +175,7 @@ These map directly onto catalog patterns (`summary-takeaways`, `kpi-hero`, `comp
 Across a deck, vary the structure so consecutive slides feel different, not like the same template with swapped content.
 
 - Alternate hero and non-hero pages: a low-density hero/cover/big-number/quote page should break up runs of dense data or comparison pages.
-- Do not mechanically reuse the same card grid, chip row, or table pattern across slides. Vary the pattern, the column count, and the title position.
+- Do not mechanically reuse the same card grid, chip row, or table pattern across slides. Vary the pattern, the column count, and the main visual treatment.
 - Vary support density: most pages should be one dominant module with 0–2 chips; only some pages need a 3-card grid.
 
 > Limitation: deck-level rhythm applies to the deck-generation main flow where the model writes several pages in sequence. Single-page edit does not control neighbor pages, so it only needs to fit the page it is given.

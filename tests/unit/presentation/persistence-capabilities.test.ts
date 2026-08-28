@@ -133,11 +133,12 @@ describe('presentation persistence capabilities', () => {
       'Product experience'
     )
 
+    // emoji 图标位仍是确定性错误：拦截、不落盘
     const rejectedPath = path.join(projectDir, 'page-rejected.html')
     await expect(
       persistPageHtmlFromFragment({
         content:
-          '<section class="px-24"><h1 class="text-xl">Tiny title</h1><p class="text-sm">Tiny body</p><svg viewBox="0 0 24 24"></svg></section>',
+          '<section class="px-24"><h1 class="text-5xl">Emoji icon</h1><div class="w-12 h-12 rounded-full flex items-center justify-center"><span class="text-2xl">🚀</span></div></section>',
         pageId: 'page-rejected',
         projectDir,
         targetPath: rejectedPath,
@@ -145,6 +146,27 @@ describe('presentation persistence capabilities', () => {
       })
     ).rejects.toMatchObject<PageWriteValidationError>({ kind: 'harness-quality' })
     await expect(fs.promises.stat(rejectedPath)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('auto-raises below-floor font sizes instead of rejecting the page', async () => {
+    const projectDir = await createTemporaryDirectory()
+    const raisedPath = path.join(projectDir, 'page-raised.html')
+    const raised = await persistPageHtmlFromFragment({
+      content:
+        '<section class="px-24"><h1 class="text-xl">Tiny title</h1><p class="text-sm">Tiny body</p><svg viewBox="0 0 24 24"></svg></section>',
+      pageId: 'page-raised',
+      projectDir,
+      targetPath: raisedPath,
+      slideSize: requireSlideSizePreset('wide-16-9')
+    })
+    expect(raised.html).toContain('text-[24px]')
+    expect(raised.html).toContain('text-[18px]')
+    expect(raised.html).toContain('Tiny title')
+    expect(raised.html).not.toContain('text-xl')
+    expect(raised.html).not.toContain('text-sm"')
+    const written = await fs.promises.readFile(raisedPath, 'utf-8')
+    expect(written).toContain('text-[24px]')
+    expect(written).toContain('text-[18px]')
   })
 
   it('rolls back the page when rendered validation rejects the new layout', async () => {

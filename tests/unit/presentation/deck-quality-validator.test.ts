@@ -157,7 +157,7 @@ describe('deck quality validator', () => {
     ])
   })
 
-  it('keeps title, margin, density, silhouette, and UI judgments advisory', () => {
+  it('blocks title-band drift while keeping margin, density, silhouette, and UI judgments advisory', () => {
     const repeated = [2, 3, 4, 5].map((pageNumber) =>
       page(pageNumber, {
         metrics: {
@@ -192,7 +192,40 @@ describe('deck quality validator', () => {
     expect(codes).toContain('deck-density-spike')
     expect(codes).toContain('deck-repeated-silhouette')
     expect(codes).toContain('deck-web-ui-pattern')
-    expect(violations.every((violation) => violation.severity === 'warn')).toBe(true)
+    const anchorDrift = violations.find(
+      (violation) => violation.code === 'deck-title-anchor-drift'
+    )
+    expect(anchorDrift?.severity).toBe('error')
+    expect(anchorDrift?.pageIds).toEqual(['page-5'])
+    expect(
+      violations
+        .filter((violation) => violation.code !== 'deck-title-anchor-drift')
+        .every((violation) => violation.severity === 'warn')
+    ).toBe(true)
+  })
+
+  it('blocks title-band font-size drift against the deck median', () => {
+    const violations = evaluateDeckQuality({
+      pages: [
+        page(2),
+        page(3),
+        page(4),
+        page(5, {
+          metrics: {
+            ...page(5).metrics,
+            title: { ...page(5).metrics.title!, fontSize: 28 }
+          }
+        })
+      ],
+      slideSize,
+      designContract
+    })
+
+    const anchorDrift = violations.find(
+      (violation) => violation.code === 'deck-title-anchor-drift'
+    )
+    expect(anchorDrift?.severity).toBe('error')
+    expect(anchorDrift?.pageIds).toEqual(['page-5'])
   })
 
   it('does not enforce the generated font contract on inherited templates', () => {

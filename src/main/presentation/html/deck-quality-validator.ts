@@ -236,22 +236,27 @@ export function evaluateDeckQuality(args: {
   if (conventionalPages.length >= 3) {
     const titleXMedian = median(conventionalPages.map((page) => page.metrics.title?.rect.x || 0))
     const titleYMedian = median(conventionalPages.map((page) => page.metrics.title?.rect.y || 0))
+    const titleSizeMedian = median(
+      conventionalPages.map((page) => page.metrics.title?.fontSize || 0)
+    )
     const titleOutliers = conventionalPages.filter((page) => {
-      const rect = page.metrics.title?.rect
-      if (!rect) return false
+      const title = page.metrics.title
+      if (!title) return false
       return (
-        Math.abs(rect.x - titleXMedian) > slideSize.width * 0.08 ||
-        Math.abs(rect.y - titleYMedian) > slideSize.height * 0.07
+        Math.abs(title.rect.x - titleXMedian) > slideSize.width * 0.08 ||
+        Math.abs(title.rect.y - titleYMedian) > slideSize.height * 0.07 ||
+        (titleSizeMedian > 0 &&
+          Math.abs(title.fontSize - titleSizeMedian) > titleSizeMedian * 0.15)
       )
     })
     if (titleOutliers.length > 0) {
       const pageIds = titleOutliers.map((page) => page.pageId)
       violations.push({
         code: 'deck-title-anchor-drift',
-        severity: 'warn',
+        severity: 'error',
         pageIds,
-        detail: `${pageIds.length} 个常规内容页的标题锚点明显偏离整套中位位置：${formatPageList(pageIds)}`,
-        fix: '除封面、金句和全图页外，让页标题回到统一标题带或同一基线；若是有意变化，应保证与相邻页形成清晰节奏'
+        detail: `${pageIds.length} 个常规内容页的标题带（位置或字号）偏离整套中位基准：${formatPageList(pageIds)}`,
+        fix: '除封面、金句和全图页外，页标题必须回到整套统一的标题带：与相邻页相同的对齐、字号档位、kicker/装饰形态和标题-内容间距；不要逐页更换标题位置、对齐或装饰形态'
       })
     }
   }

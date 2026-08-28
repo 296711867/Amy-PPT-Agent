@@ -117,7 +117,7 @@ export const DEFAULT_EXPERT_LAYOUT_MARKDOWN = `## 专业 PPT 构图原则
 - 胶囊只承载 2–3 个短关键词、分类或维度，不能做按钮，也不能放句子和普通正文。
 - 缺少必要图片时可使用比例明确、可替换的语义占位框；不要伪造照片，也不要把占位框当装饰。
 - 数据、比较、建议和教学页面可增加一句总结；标题已经表达相同结论时不要重复。
-- 相邻页面避免重复相同轮廓、卡片网格、标题位置和主视觉方向，但整套演示的字体、间距和视觉语言应保持一致。
+- 相邻页面避免重复相同轮廓、卡片网格和主视觉方向；常规内容页共用同一标题带（对齐、字号档位、装饰形态整套一致），整套演示的字体、间距和视觉语言保持一致。
 - 写入前检查：页面应像一张被设计过的 PPT，而不是网页组件库、后台 Dashboard 或产品设置页。`
 
 export interface LayoutRulesProfile {
@@ -161,20 +161,20 @@ export const DEFAULT_LAYOUT_RULES: LayoutRulesProfile = Object.freeze({
   safeAreaHorizontalPercent: 10,
   safeAreaVerticalPercent: 14,
   deckTitleSize: 64,
-  slideTitleSize: 40,
-  slideSubtitleSize: 26,
-  moduleTitleSize: 24,
-  bodySize: 20,
-  emphasisSize: 52,
+  slideTitleSize: 48,
+  slideSubtitleSize: 28,
+  moduleTitleSize: 28,
+  bodySize: 24,
+  emphasisSize: 56,
   auxiliarySize: 14,
   maxContentBlocks: 3,
   heroMinPercent: 40,
   cardGap: 24,
-  cardPadding: 24,
+  cardPadding: 32,
   titleContentGap: 40,
   sectionGap: 48,
   staircaseOffset: 64,
-  iconBoxSize: 52,
+  iconBoxSize: 64,
   moduleTitleBodyGap: 8,
   summaryLineMode: 'contextual',
   expertMarkdown: DEFAULT_EXPERT_LAYOUT_MARKDOWN
@@ -413,7 +413,7 @@ export function buildLayoutRulesPrompt(value: unknown, canvas?: LayoutRulesCanva
     `2. Select exactly one primary structure pattern from the enabled list: ${rules.enabledPatterns.join(', ')}.`,
     '3. Sketch the whole-slide silhouette and reading path before creating modules. 相邻页面可以变化的是叙事结构（焦点位置、分区方式、内容形态），但整套 deck 的留白基准、卡片外框样式、图标规范、对齐方式必须保持一致——不得为了“避免重复”而换掉这些统一基准。',
     '4. Apply the current Style Skill to color, font family, corner treatment, icon texture, imagery, and decoration without changing the chosen structure.',
-    '5. Calculate safe area, title/content zones, wrapping, gaps, and height budget before writing. Shorten copy or change representation before shrinking type.',
+    '5. Calculate safe area, title/content zones, wrapping, gaps, and height budget before writing. When the budget is exceeded, cut copy, merge modules, or change representation first — never fall back to smaller-than-target body/title/icon sizes to squeeze content onto the slide.',
     '6. Run the web-layout failure check below; if it fails, choose a better PPT pattern and recompose.',
     '',
     '### Structure and hierarchy',
@@ -438,6 +438,7 @@ export function buildLayoutRulesPrompt(value: unknown, canvas?: LayoutRulesCanva
     `- 图标基准：同一组并列卡片的图标要么全有、要么全无，底托统一为约 ${rules.iconBoxSize}px 的圆形（尺寸、形状、配色、描边完全一致）；不允许组内只有部分卡片带图标。`,
     '- 对齐基准：同一组并列模块（同行或同一容器的兄弟卡片）的 justify-* 与 items-* 必须完全一致，顶部和底部落在同一基准线上；高度不齐时用 grid items-stretch 或 flex-1 等高撑满容器，不用各自自然高度，更不得把 justify-start 与 justify-center 混用。',
     '- 形态同构：同一行或同一容器内的并列模块必须是同一种内容形态（同为图文模块、同为数据卡、同为编号条），不得把图文模块、大圆图标、网格卡片等异构形态混排进同一并列组——否则永远拼不出对齐的统一矩形。',
+    `- 标题带基准：常规内容页（非封面/金句/全图页）共用同一标题带——标题对齐统一（默认左对齐，与 ${rules.safeAreaHorizontalPercent}% 安全区左缘同线）、字号统一为 slide title 档（约 ${typography.slideTitle}px）、标题到内容的间距统一为约 ${rules.titleContentGap}px；kicker/眉标、标题装饰线等标题带元素要么整套都有、要么整套都没有，样式逐项一致，小于 18px 的眉标必须标记 data-ppt-text-role="auxiliary"（且 ≥12px），副标题按正文下限 ≥18px。逐页变化只允许发生在主视觉与内容区，不得更换标题位置、对齐或装饰形态。`,
     '',
     '### Web-layout failure check',
     '- Is the page merely an equal-width card grid?',

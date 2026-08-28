@@ -287,7 +287,7 @@ describe('registerSettingsHandlers layout rules settings', () => {
         maxContentBlocks: 6,
         heroMinPercent: 45,
         compositionMode: 'native-ppt',
-        moduleTitleSize: 24
+        moduleTitleSize: 28
       }
     })
   })

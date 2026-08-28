@@ -29,11 +29,11 @@ describe('deck quality differential guard', () => {
         fix: 'fix font'
       },
       {
-        code: 'deck-title-anchor-drift',
+        code: 'deck-title-size-rhythm',
         severity: 'warn',
         pageIds: ['page-2'],
         detail: 'advisory',
-        fix: 'align title'
+        fix: 'raise title size'
       }
     ])
 

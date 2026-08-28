@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { SLIDE_SIZE_PRESETS } from '@shared/slide-size'
-import { validatePageQuality } from '../../../src/main/presentation/html/page-quality-validator'
+import {
+  repairExplicitFontFloors,
+  validatePageQuality
+} from '../../../src/main/presentation/html/page-quality-validator'
 
 const wide = SLIDE_SIZE_PRESETS.find((p) => p.id === 'wide-16-9')! // 1600×900 → floor 96px = px-24
 
@@ -129,6 +132,76 @@ describe('validatePageQuality', () => {
         '<div class="px-16"><h2 class="text-[40px]">竖版标题</h2><p class="text-2xl">24px 正文对竖版画布过小。</p><svg viewBox="0 0 10 10"></svg></div>'
       )
       expect(codes(validatePageQuality(html, vertical))).toContain('font-below-floor')
+    })
+
+    it('keeps the heading floor off subtitle and kicker text inside the title band', () => {
+      const html = wrap(
+        '<div class="px-24"><header data-role="title"><p class="text-[13px] tracking-[0.3em]" data-ppt-text-role="auxiliary">SECTION KICKER</p><h1 class="text-5xl">统一标题带</h1><p class="mt-5 text-[22px]">副标题按正文下限处理，22px 不再被误判为标题。</p></header><h3 class="text-[20px]">模块标题</h3><svg viewBox="0 0 10 10"></svg></div>'
+      )
+      const violations = validatePageQuality(html, wide).filter(
+        (item) => item.code === 'font-below-floor'
+      )
+      expect(violations).toHaveLength(1)
+      expect(violations[0].detail).toContain('20px')
+      expect(violations[0].detail).toContain('标题下限 24px')
+    })
+
+    it('still applies the heading floor to the element carrying data-role="title"', () => {
+      const html = wrap(
+        '<div class="px-24"><p data-role="title" class="text-[22px]">被标记为标题的元素本身</p><svg viewBox="0 0 10 10"></svg></div>'
+      )
+      const violations = validatePageQuality(html, wide).filter(
+        (item) => item.code === 'font-below-floor'
+      )
+      expect(violations).toHaveLength(1)
+      expect(violations[0].detail).toContain('标题下限 24px')
+    })
+
+    it('still rejects an unmarked sub-18px kicker inside the title band', () => {
+      const html = wrap(
+        '<div class="px-24"><header data-role="title"><p class="text-[16px] tracking-[0.3em]">KICKER</p><h1 class="text-5xl">统一标题带</h1></header><svg viewBox="0 0 10 10"></svg></div>'
+      )
+      const violations = validatePageQuality(html, wide).filter(
+        (item) => item.code === 'font-below-floor'
+      )
+      expect(violations).toHaveLength(1)
+      expect(violations[0].detail).toContain('正文下限 18px')
+    })
+  })
+
+  describe('repairExplicitFontFloors', () => {
+    it('raises below-floor explicit sizes to the floor and clears font-below-floor violations', () => {
+      const html = wrap(
+        '<div class="px-24"><h1 class="text-5xl">页面标题</h1><h3 class="text-xl font-medium mb-2">模块标题</h3><p class="text-[16px]">正文说明文字。</p><span class="text-[14px]">标签</span></div>'
+      )
+      const repaired = repairExplicitFontFloors(html, wide)
+      expect(repaired.fixes).toHaveLength(3)
+      expect(repaired.html).toContain('text-[24px] font-medium')
+      expect(repaired.html).not.toContain('text-xl')
+      expect(repaired.html).not.toContain('text-[16px]')
+      expect(repaired.html).not.toContain('text-[14px]')
+      expect(codes(validatePageQuality(repaired.html, wide))).not.toContain('font-below-floor')
+    })
+
+    it('raises inline font-size styles and respects the body floor inside the title band', () => {
+      const html = wrap(
+        '<div class="px-24"><header data-role="title"><h1 class="text-5xl">统一标题带</h1><p class="text-[16px]">副标题</p></header><p style="font-size: 15px">内联小字正文。</p></div>'
+      )
+      const repaired = repairExplicitFontFloors(html, wide)
+      expect(repaired.fixes).toHaveLength(2)
+      expect(repaired.html).toContain('text-[18px]">副标题')
+      expect(repaired.html).toContain('font-size: 18px')
+      expect(codes(validatePageQuality(repaired.html, wide))).not.toContain('font-below-floor')
+    })
+
+    it('leaves auxiliary text and above-floor text untouched', () => {
+      const html = wrap(
+        '<div class="px-24"><h1 class="text-5xl">页面标题</h1><p class="text-lg">正文保持清晰。</p><footer class="text-xs">来源：示例数据</footer><span class="text-[13px]" data-ppt-text-role="auxiliary">眉标</span></div>'
+      )
+      const repaired = repairExplicitFontFloors(html, wide)
+      expect(repaired.fixes).toHaveLength(0)
+      expect(repaired.html).toContain('text-xs')
+      expect(repaired.html).toContain('text-[13px]')
     })
   })
 

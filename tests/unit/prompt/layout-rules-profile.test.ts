@@ -40,6 +40,24 @@ describe('layout rules prompt injection', () => {
     expect(prompt).toContain('system safety/canvas/export hard rules > explicit current edit request')
   })
 
+  it('promotes the title band to a deck-level hard contract', () => {
+    const prompt = buildLayoutRulesPrompt(
+      {
+        preset: 'consulting',
+        compositionMode: 'native-ppt',
+        enabledPatterns: ['staircase-strips']
+      },
+      resolveSlideSize({ id: 'wide-16-9' })
+    )
+
+    expect(prompt).toContain('- 标题带基准：')
+    expect(prompt).toContain('对齐统一')
+    expect(prompt).toContain('字号统一为 slide title 档')
+    expect(prompt).toContain('要么整套都有、要么整套都没有')
+    expect(prompt).toContain('不得更换标题位置、对齐或装饰形态')
+    expect(prompt).not.toContain('标题位置和主视觉方向')
+  })
+
   it('injects the profile into every edit scope', () => {
     const contexts: SessionDeckGenerationContext[] = [
       { ...baseContext, mode: 'edit', editScope: 'presentation-container' },
