@@ -26,7 +26,6 @@ import type {
   ModelUsageStats,
   ModelUsageTotals
 } from '@shared/model-usage'
-import type { AnimationPreferencesPayload } from '@shared/generation'
 import { requirePersistedSlideSize } from '@shared/slide-size'
 import type { SlideSizePresetId } from '@shared/slide-size'
 import type { HtmlThumbnailResourceType } from '@shared/thumbnail'
@@ -59,13 +58,24 @@ import {
   type CreateProjectInput,
   type ProjectStatus
 } from './repositories/project-repository'
+import {
+  GenerationRunRepository,
+  type GenerationPageCreateData,
+  type GenerationRunCreateData,
+  type SessionJobCreateData,
+  type UpsertGenerationPageInput
+} from './repositories/generation-run-repository'
+import {
+  SessionPageRepository,
+  type PersistSessionPageStateInput,
+  type ReplaceSourcePageSkeletonsArgs,
+  type UpsertSourcePageSkeletonArgs
+} from './repositories/session-page-repository'
 import { SessionStyleSnapshotRepository } from './repositories/session-style-snapshot-repository'
 import { SessionStyleSnapshotService } from './services/session-style-snapshot-service'
 import {
   type ChatScope,
   type GenerationPageRecord,
-  type GenerationPageStatus,
-  type GenerationRunMode,
   type GenerationRunRecord,
   type GenerationRunStatus,
   type ImageGenerationHistoryRow,
@@ -91,9 +101,7 @@ import {
   type SessionStyleSnapshotInput,
   type SessionStyleSnapshotRow,
   type SessionWithPageCount,
-  type SourcePageSkeletonConfidence,
   type SourcePageSkeletonRecord,
-  type SourcePageSkeletonRole,
   type StyleRow,
   type StyleSource,
   type ThumbnailRecord,
@@ -113,44 +121,6 @@ interface MemorySummary {
 }
 
 
-type GenerationRunCreateData = {
-  id?: string
-  sessionId: string
-  mode: GenerationRunMode
-  totalPages: number
-  metadata?: unknown
-  animationPreferences?: AnimationPreferencesPayload | null
-  modelConfigId?: string | null
-}
-
-type SessionJobCreateData = {
-  id: string
-  sessionId: string
-  kind: SessionJobKind
-  status: Extract<SessionJobStatus, 'pending' | 'active'>
-  previousSessionStatus: SessionStatus
-  targetPageId?: string
-  targetPageNumber?: number
-  selector?: string
-  totalPages?: number
-}
-
-type GenerationPageCreateData = {
-  pageId: string
-  pageNumber: number
-  title: string
-  contentOutline?: string | null
-  layoutIntent?: string | null
-  layoutId?: string | null
-  imageAssetPath?: string | null
-  imageAssetPaths?: string[] | null
-  htmlPath?: string | null
-  status?: Extract<GenerationPageStatus, 'pending' | 'running'>
-  error?: string | null
-  retryCount?: number
-}
-
-
 export class PPTDatabase {
   private db: ReturnType<typeof drizzle>
   private client: ReturnType<typeof createClient>
@@ -163,6 +133,8 @@ export class PPTDatabase {
   private thumbnailRepository: ThumbnailRepository
   private userPreferenceRepository: UserPreferenceRepository
   private projectRepository: ProjectRepository
+  private generationRunRepository: GenerationRunRepository
+  private sessionPageRepository: SessionPageRepository
   private sessionStyleSnapshotRepository: SessionStyleSnapshotRepository
   private sessionStyleSnapshotService: SessionStyleSnapshotService
 
@@ -187,6 +159,8 @@ export class PPTDatabase {
     this.thumbnailRepository = new ThumbnailRepository(this.db)
     this.userPreferenceRepository = new UserPreferenceRepository(this.db)
     this.projectRepository = new ProjectRepository(this.db)
+    this.generationRunRepository = new GenerationRunRepository(this.db)
+    this.sessionPageRepository = new SessionPageRepository(this.db)
     this.sessionStyleSnapshotRepository = new SessionStyleSnapshotRepository(this.db)
     this.sessionStyleSnapshotService = new SessionStyleSnapshotService({
       repository: this.sessionStyleSnapshotRepository,
@@ -571,195 +545,6 @@ export class PPTDatabase {
     })
   }
 
-  // ========== Generation Records ==========
-
-  private normalizeGenerationRunRow(row: Record<string, unknown>): GenerationRunRecord {
-    return {
-      id: String(row.id || ''),
-      session_id: String(row.sessionId ?? row.session_id ?? ''),
-      mode: String(row.mode || 'generate') as GenerationRunMode,
-      status: String(row.status || 'running') as GenerationRunStatus,
-      total_pages: Number(row.totalPages ?? row.total_pages ?? 0) || 0,
-      error: typeof row.error === 'string' ? String(row.error) : null,
-      metadata: typeof row.metadata === 'string' ? String(row.metadata) : null,
-      animation_preferences:
-        typeof (row.animationPreferences ?? row.animation_preferences) === 'string'
-          ? String(row.animationPreferences ?? row.animation_preferences)
-          : null,
-      model_config_id:
-        typeof (row.modelConfigId ?? row.model_config_id) === 'string'
-          ? String(row.modelConfigId ?? row.model_config_id)
-          : null,
-      created_at: Number(row.createdAt ?? row.created_at ?? 0) || 0,
-      updated_at: Number(row.updatedAt ?? row.updated_at ?? 0) || 0
-    }
-  }
-
-  private normalizeSessionJobRow(row: Record<string, unknown>): SessionJobRecord {
-    const status = String(row.status || 'pending')
-    const kind = String(row.kind || 'standard')
-    const previousSessionStatus = String(
-      row.previousSessionStatus ?? row.previous_session_status ?? 'active'
-    )
-    return {
-      id: String(row.id || ''),
-      session_id: String(row.sessionId ?? row.session_id ?? ''),
-      kind: (kind === 'template' ||
-      kind === 'retry' ||
-      kind === 'add-page' ||
-      kind === 'single-page-retry' ||
-      kind === 'page-edit' ||
-      kind === 'deck-edit' ||
-      kind === 'style-switch' ||
-      kind === 'page-beautify'
-        ? kind
-        : 'standard') as SessionJobKind,
-      previous_session_status:
-        previousSessionStatus === 'completed' ||
-        previousSessionStatus === 'failed' ||
-        previousSessionStatus === 'archived'
-          ? previousSessionStatus
-          : 'active',
-      target_page_id:
-        typeof (row.targetPageId ?? row.target_page_id) === 'string' &&
-        String(row.targetPageId ?? row.target_page_id).trim().length > 0
-          ? String(row.targetPageId ?? row.target_page_id)
-          : null,
-      target_page_number:
-        typeof (row.targetPageNumber ?? row.target_page_number) === 'number'
-          ? Number(row.targetPageNumber ?? row.target_page_number)
-          : null,
-      selector:
-        typeof row.selector === 'string' && row.selector.trim().length > 0 ? row.selector : null,
-      total_pages:
-        typeof (row.totalPages ?? row.total_pages) === 'number'
-          ? Math.max(1, Number(row.totalPages ?? row.total_pages) || 1)
-          : null,
-      status: (status === 'active' || status === 'finished' || status === 'aborted'
-        ? status
-        : 'pending') as SessionJobStatus,
-      abort_reason:
-        typeof (row.abortReason ?? row.abort_reason) === 'string'
-          ? String(row.abortReason ?? row.abort_reason)
-          : null,
-      created_at: Number(row.createdAt ?? row.created_at ?? 0) || 0,
-      activated_at:
-        typeof (row.activatedAt ?? row.activated_at) === 'number'
-          ? Number(row.activatedAt ?? row.activated_at)
-          : null,
-      updated_at: Number(row.updatedAt ?? row.updated_at ?? 0) || 0,
-      finished_at:
-        typeof (row.finishedAt ?? row.finished_at) === 'number'
-          ? Number(row.finishedAt ?? row.finished_at)
-          : null
-    }
-  }
-
-  private normalizeGenerationPageRow(row: Record<string, unknown>): GenerationPageRecord {
-    return {
-      id: String(row.id || ''),
-      run_id: String(row.runId ?? row.run_id ?? ''),
-      session_id: String(row.sessionId ?? row.session_id ?? ''),
-      page_id: String(row.pageId ?? row.page_id ?? ''),
-      page_number: Number(row.pageNumber ?? row.page_number ?? 0) || 0,
-      title: String(row.title || ''),
-      content_outline:
-        typeof (row.contentOutline ?? row.content_outline) === 'string'
-          ? String(row.contentOutline ?? row.content_outline)
-          : null,
-      layout_intent:
-        typeof (row.layoutIntent ?? row.layout_intent) === 'string'
-          ? String(row.layoutIntent ?? row.layout_intent)
-          : null,
-      layout_id:
-        typeof (row.layoutId ?? row.layout_id) === 'string'
-          ? String(row.layoutId ?? row.layout_id)
-          : null,
-      image_asset_path:
-        typeof (row.imageAssetPath ?? row.image_asset_path) === 'string'
-          ? String(row.imageAssetPath ?? row.image_asset_path)
-          : null,
-      image_asset_paths: (() => {
-        const value = row.imageAssetPaths ?? row.image_asset_paths
-        if (Array.isArray(value))
-          return value.filter((item): item is string => typeof item === 'string')
-        if (typeof value !== 'string' || !value.trim()) return []
-        try {
-          const parsed = JSON.parse(value)
-          return Array.isArray(parsed)
-            ? parsed.filter((item): item is string => typeof item === 'string')
-            : []
-        } catch {
-          return []
-        }
-      })(),
-      html_path:
-        typeof (row.htmlPath ?? row.html_path) === 'string'
-          ? String(row.htmlPath ?? row.html_path)
-          : null,
-      status: String(row.status || 'pending') as GenerationPageStatus,
-      error: typeof row.error === 'string' ? String(row.error) : null,
-      retry_count: Number(row.retryCount ?? row.retry_count ?? 0) || 0,
-      created_at: Number(row.createdAt ?? row.created_at ?? 0) || 0,
-      updated_at: Number(row.updatedAt ?? row.updated_at ?? 0) || 0
-    }
-  }
-
-  private normalizeSessionPageRow(row: Record<string, unknown>): SessionPageRecord {
-    return {
-      id: String(row.id || ''),
-      session_id: String(row.sessionId ?? row.session_id ?? ''),
-      legacy_page_id:
-        typeof (row.legacyPageId ?? row.legacy_page_id) === 'string'
-          ? String(row.legacyPageId ?? row.legacy_page_id)
-          : null,
-      file_slug: String(row.fileSlug ?? row.file_slug ?? ''),
-      page_number: Number(row.pageNumber ?? row.page_number ?? 0) || 0,
-      title: String(row.title || ''),
-      html_path: String(row.htmlPath ?? row.html_path ?? ''),
-      status: String(row.status || 'pending') as SessionPageStatus,
-      error: typeof row.error === 'string' ? row.error : null,
-      created_at: Number(row.createdAt ?? row.created_at ?? 0) || 0,
-      updated_at: Number(row.updatedAt ?? row.updated_at ?? 0) || 0,
-      deleted_at:
-        typeof (row.deletedAt ?? row.deleted_at) === 'number'
-          ? Number(row.deletedAt ?? row.deleted_at)
-          : null
-    }
-  }
-
-  private normalizeSourcePageSkeletonRow(row: Record<string, unknown>): SourcePageSkeletonRecord {
-    return {
-      id: String(row.id || ''),
-      session_id: String(row.sessionId ?? row.session_id ?? ''),
-      page_number: Number(row.pageNumber ?? row.page_number ?? 0) || 0,
-      title: String(row.title || ''),
-      role: String(row.role || 'content') === 'chapter-divider' ? 'chapter-divider' : 'content',
-      source_document_path: String(row.sourceDocumentPath ?? row.source_document_path ?? ''),
-      source_document_name:
-        typeof (row.sourceDocumentName ?? row.source_document_name) === 'string'
-          ? String(row.sourceDocumentName ?? row.source_document_name)
-          : null,
-      source_heading: String(row.sourceHeading ?? row.source_heading ?? ''),
-      heading_level: Number(row.headingLevel ?? row.heading_level ?? 0) || 1,
-      line_start: Number(row.lineStart ?? row.line_start ?? 0) || 1,
-      line_end: Number(row.lineEnd ?? row.line_end ?? 0) || 1,
-      reason:
-        typeof row.reason === 'string' && row.reason.trim().length > 0 ? String(row.reason) : null,
-      layout_intent:
-        typeof (row.layoutIntent ?? row.layout_intent) === 'string'
-          ? String(row.layoutIntent ?? row.layout_intent)
-          : null,
-      layout_id:
-        typeof (row.layoutId ?? row.layout_id) === 'string'
-          ? String(row.layoutId ?? row.layout_id)
-          : null,
-      confidence: row.confidence === 'medium' || row.confidence === 'low' ? row.confidence : 'high',
-      created_at: Number(row.createdAt ?? row.created_at ?? 0) || 0,
-      updated_at: Number(row.updatedAt ?? row.updated_at ?? 0) || 0
-    }
-  }
-
   // ── 会话事件日志（append-only，支持审计/回放/时间旅行） ──────
 
   async appendSessionEvent(data: {
@@ -819,56 +604,17 @@ export class PPTDatabase {
     return result[0]?.count ?? 0
   }
 
+  // ========== Generation Runs / Jobs / Pages（仓库委托） ==========
+
   async createGenerationRun(data: GenerationRunCreateData): Promise<string> {
-    const id = data.id || crypto.randomUUID()
-    const now = Math.floor(Date.now() / 1000)
-    const animationPreferences = data.animationPreferences
-      ? JSON.stringify(data.animationPreferences)
-      : null
-    await this.db
-      .insert(schema.generationRuns)
-      .values({
-        id,
-        sessionId: data.sessionId,
-        mode: data.mode,
-        status: 'running',
-        totalPages: Math.max(0, Math.floor(data.totalPages || 0)),
-        error: null,
-        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-        animationPreferences,
-        modelConfigId:
-          typeof data.modelConfigId === 'string' && data.modelConfigId.trim().length > 0
-            ? data.modelConfigId.trim()
-            : null,
-        createdAt: now,
-        updatedAt: now
-      })
-      .onConflictDoUpdate({
-        target: schema.generationRuns.id,
-        set: {
-          sessionId: data.sessionId,
-          mode: data.mode,
-          status: 'running',
-          totalPages: Math.max(0, Math.floor(data.totalPages || 0)),
-          error: null,
-          metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-          animationPreferences,
-          modelConfigId:
-            typeof data.modelConfigId === 'string' && data.modelConfigId.trim().length > 0
-              ? data.modelConfigId.trim()
-              : null,
-          updatedAt: now
-        }
-      })
-      .run()
-    return id
+    return this.generationRunRepository.createGenerationRun(data)
   }
 
   async createGenerationRunWithSessionJob(data: {
     run: GenerationRunCreateData & { id: string }
     job: SessionJobCreateData
   }): Promise<void> {
-    await this.createGenerationRunWithSessionJobAndPages({ ...data, pages: [] })
+    return this.generationRunRepository.createGenerationRunWithSessionJob(data)
   }
 
   async createGenerationRunWithSessionJobAndPages(data: {
@@ -876,83 +622,7 @@ export class PPTDatabase {
     job: SessionJobCreateData
     pages: GenerationPageCreateData[]
   }): Promise<void> {
-    if (data.run.id !== data.job.id) {
-      throw new Error('generation run and session job must share the same id')
-    }
-    if (data.run.sessionId !== data.job.sessionId) {
-      throw new Error('generation run and session job must belong to the same session')
-    }
-
-    const now = Math.floor(Date.now() / 1000)
-    const animationPreferences = data.run.animationPreferences
-      ? JSON.stringify(data.run.animationPreferences)
-      : null
-    const runTotalPages = Math.max(0, Math.floor(data.run.totalPages || 0))
-    const modelConfigId =
-      typeof data.run.modelConfigId === 'string' && data.run.modelConfigId.trim().length > 0
-        ? data.run.modelConfigId.trim()
-        : null
-    const jobTotalPages =
-      typeof data.job.totalPages === 'number' && Number.isFinite(data.job.totalPages)
-        ? Math.max(1, Math.floor(data.job.totalPages))
-        : null
-
-    await this.db.transaction(async (tx) => {
-      await tx.insert(schema.generationRuns).values({
-        id: data.run.id,
-        sessionId: data.run.sessionId,
-        mode: data.run.mode,
-        status: 'running',
-        totalPages: runTotalPages,
-        error: null,
-        metadata: data.run.metadata ? JSON.stringify(data.run.metadata) : null,
-        animationPreferences,
-        modelConfigId,
-        createdAt: now,
-        updatedAt: now
-      })
-      await tx.insert(schema.sessionJobs).values({
-        id: data.job.id,
-        sessionId: data.job.sessionId,
-        kind: data.job.kind,
-        previousSessionStatus: data.job.previousSessionStatus,
-        targetPageId: data.job.targetPageId || null,
-        targetPageNumber: data.job.targetPageNumber ?? null,
-        selector: data.job.selector || null,
-        totalPages: jobTotalPages,
-        status: data.job.status,
-        abortReason: null,
-        createdAt: now,
-        activatedAt: data.job.status === 'active' ? now : null,
-        updatedAt: now,
-        finishedAt: null
-      })
-
-      if (data.pages.length === 0) return
-      await tx.insert(schema.generationPages).values(
-        data.pages.map((page) => ({
-          id: `${data.run.id}:${page.pageId}`,
-          runId: data.run.id,
-          sessionId: data.run.sessionId,
-          pageId: page.pageId,
-          pageNumber: Math.max(1, Math.floor(page.pageNumber)),
-          title: page.title,
-          contentOutline: page.contentOutline || null,
-          layoutIntent: page.layoutIntent || null,
-          layoutId: page.layoutId || null,
-          imageAssetPath: page.imageAssetPath || null,
-          imageAssetPaths: page.imageAssetPaths?.length
-            ? JSON.stringify(page.imageAssetPaths)
-            : null,
-          htmlPath: page.htmlPath || null,
-          status: page.status || 'pending',
-          error: page.error || null,
-          retryCount: Math.max(0, Math.floor(page.retryCount || 0)),
-          createdAt: now,
-          updatedAt: now
-        }))
-      )
-    })
+    return this.generationRunRepository.createGenerationRunWithSessionJobAndPages(data)
   }
 
   async updateSessionJobStatus(
@@ -960,72 +630,22 @@ export class PPTDatabase {
     status: SessionJobStatus,
     options?: { abortReason?: string | null }
   ): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    const set: Record<string, unknown> = {
-      status,
-      updatedAt: now
-    }
-    if (status === 'active') {
-      set.activatedAt = now
-      set.finishedAt = null
-      set.abortReason = null
-    }
-    if (status === 'finished') {
-      set.finishedAt = now
-      set.abortReason = null
-    }
-    if (status === 'aborted') {
-      set.finishedAt = now
-      set.abortReason = options?.abortReason || null
-    }
-    await this.db.update(schema.sessionJobs).set(set).where(eq(schema.sessionJobs.id, jobId)).run()
+    return this.generationRunRepository.updateSessionJobStatus(jobId, status, options)
   }
 
   async getSessionJob(jobId: string): Promise<SessionJobRecord | undefined> {
-    const row = await this.db
-      .select()
-      .from(schema.sessionJobs)
-      .where(eq(schema.sessionJobs.id, jobId))
-      .get()
-    return row ? this.normalizeSessionJobRow(row as Record<string, unknown>) : undefined
+    return this.generationRunRepository.getSessionJob(jobId)
   }
 
   async getLatestSessionJob(
     sessionId: string,
     kinds?: readonly SessionJobKind[]
   ): Promise<SessionJobRecord | undefined> {
-    const where =
-      kinds && kinds.length > 0
-        ? and(
-            eq(schema.sessionJobs.sessionId, sessionId),
-            inArray(schema.sessionJobs.kind, [...kinds])
-          )
-        : eq(schema.sessionJobs.sessionId, sessionId)
-    const row = await this.db
-      .select()
-      .from(schema.sessionJobs)
-      .where(where)
-      .orderBy(desc(schema.sessionJobs.updatedAt), desc(schema.sessionJobs.createdAt))
-      .limit(1)
-      .get()
-    return row ? this.normalizeSessionJobRow(row as Record<string, unknown>) : undefined
+    return this.generationRunRepository.getLatestSessionJob(sessionId, kinds)
   }
 
   async listActiveSessionJobs(kinds?: readonly SessionJobKind[]): Promise<SessionJobRecord[]> {
-    const where =
-      kinds && kinds.length > 0
-        ? and(
-            inArray(schema.sessionJobs.status, ['pending', 'active']),
-            inArray(schema.sessionJobs.kind, [...kinds])
-          )
-        : inArray(schema.sessionJobs.status, ['pending', 'active'])
-    const rows = await this.db
-      .select()
-      .from(schema.sessionJobs)
-      .where(where)
-      .orderBy(asc(schema.sessionJobs.createdAt))
-      .all()
-    return rows.map((row) => this.normalizeSessionJobRow(row as Record<string, unknown>))
+    return this.generationRunRepository.listActiveSessionJobs(kinds)
   }
 
   async updateGenerationRunStatus(
@@ -1033,435 +653,87 @@ export class PPTDatabase {
     status: GenerationRunStatus,
     error?: string | null
   ): Promise<void> {
-    await this.db
-      .update(schema.generationRuns)
-      .set({
-        status,
-        error: error || null,
-        updatedAt: Math.floor(Date.now() / 1000)
-      })
-      .where(eq(schema.generationRuns.id, runId))
-      .run()
+    return this.generationRunRepository.updateGenerationRunStatus(runId, status, error)
   }
 
   async updateGenerationRunMetadata(runId: string, metadata: unknown): Promise<void> {
-    await this.db
-      .update(schema.generationRuns)
-      .set({
-        metadata: metadata ? JSON.stringify(metadata) : null,
-        updatedAt: Math.floor(Date.now() / 1000)
-      })
-      .where(eq(schema.generationRuns.id, runId))
-      .run()
+    return this.generationRunRepository.updateGenerationRunMetadata(runId, metadata)
   }
 
   async getGenerationRun(runId: string): Promise<GenerationRunRecord | undefined> {
-    const row = await this.db
-      .select()
-      .from(schema.generationRuns)
-      .where(eq(schema.generationRuns.id, runId))
-      .get()
-    return row ? this.normalizeGenerationRunRow(row as Record<string, unknown>) : undefined
+    return this.generationRunRepository.getGenerationRun(runId)
   }
 
   async getLatestGenerationRun(sessionId: string): Promise<GenerationRunRecord | undefined> {
-    const row = await this.db
-      .select()
-      .from(schema.generationRuns)
-      .where(eq(schema.generationRuns.sessionId, sessionId))
-      .orderBy(desc(schema.generationRuns.createdAt))
-      .limit(1)
-      .get()
-    return row ? this.normalizeGenerationRunRow(row as Record<string, unknown>) : undefined
+    return this.generationRunRepository.getLatestGenerationRun(sessionId)
   }
 
-  async upsertGenerationPage(data: {
-    runId: string
-    sessionId: string
-    pageId: string
-    pageNumber: number
-    title: string
-    contentOutline?: string | null
-    layoutIntent?: string | null
-    layoutId?: string | null
-    imageAssetPath?: string | null
-    imageAssetPaths?: string[] | null
-    htmlPath?: string | null
-    status: GenerationPageStatus
-    error?: string | null
-    retryCount?: number
-  }): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    const id = `${data.runId}:${data.pageId}`
-    const values = {
-      id,
-      runId: data.runId,
-      sessionId: data.sessionId,
-      pageId: data.pageId,
-      pageNumber: data.pageNumber,
-      title: data.title,
-      contentOutline: data.contentOutline || null,
-      layoutIntent: data.layoutIntent || null,
-      layoutId: data.layoutId || null,
-      imageAssetPath: data.imageAssetPath || null,
-      imageAssetPaths: data.imageAssetPaths?.length ? JSON.stringify(data.imageAssetPaths) : null,
-      htmlPath: data.htmlPath || null,
-      status: data.status,
-      error: data.error || null,
-      retryCount: Math.max(0, Math.floor(data.retryCount || 0)),
-      createdAt: now,
-      updatedAt: now
-    }
-    await this.db
-      .insert(schema.generationPages)
-      .values(values)
-      .onConflictDoUpdate({
-        target: schema.generationPages.id,
-        set: {
-          pageNumber: values.pageNumber,
-          title: values.title,
-          contentOutline: values.contentOutline,
-          layoutIntent: values.layoutIntent,
-          layoutId: values.layoutId,
-          imageAssetPath: values.imageAssetPath,
-          imageAssetPaths: values.imageAssetPaths,
-          htmlPath: values.htmlPath,
-          status: values.status,
-          error: values.error,
-          retryCount: values.retryCount,
-          updatedAt: now
-        }
-      })
-      .run()
+  async upsertGenerationPage(data: UpsertGenerationPageInput): Promise<void> {
+    return this.generationRunRepository.upsertGenerationPage(data)
   }
 
   async listGenerationPages(runId: string): Promise<GenerationPageRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(schema.generationPages)
-      .where(eq(schema.generationPages.runId, runId))
-      .orderBy(asc(schema.generationPages.pageNumber))
-      .all()
-    return rows.map((row) => this.normalizeGenerationPageRow(row as Record<string, unknown>))
+    return this.generationRunRepository.listGenerationPages(runId)
   }
 
   async listLatestFailedGenerationPages(sessionId: string): Promise<GenerationPageRecord[]> {
-    const run = await this.getLatestGenerationRun(sessionId)
-    if (!run) return []
-    return (await this.listGenerationPages(run.id)).filter((page) => page.status === 'failed')
+    return this.generationRunRepository.listLatestFailedGenerationPages(sessionId)
   }
 
   async listLatestGenerationPageSnapshot(sessionId: string): Promise<GenerationPageRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(schema.generationPages)
-      .where(eq(schema.generationPages.sessionId, sessionId))
-      .orderBy(desc(schema.generationPages.updatedAt), desc(schema.generationPages.createdAt))
-      .all()
-    const latestByPageId = new Map<string, GenerationPageRecord>()
-    for (const row of rows) {
-      const page = this.normalizeGenerationPageRow(row as Record<string, unknown>)
-      if (!page.page_id || latestByPageId.has(page.page_id)) continue
-      latestByPageId.set(page.page_id, page)
-    }
-    return Array.from(latestByPageId.values()).sort((a, b) => a.page_number - b.page_number)
+    return this.generationRunRepository.listLatestGenerationPageSnapshot(sessionId)
   }
+
+  // ========== Session Pages / Source Skeletons（仓库委托） ==========
 
   async listSessionPages(
     sessionId: string,
     options?: { includeDeleted?: boolean }
   ): Promise<SessionPageRecord[]> {
-    const conditions = [eq(schema.sessionPages.sessionId, sessionId)]
-    if (!options?.includeDeleted) {
-      conditions.push(isNull(schema.sessionPages.deletedAt))
-    }
-    const rows = await this.db
-      .select()
-      .from(schema.sessionPages)
-      .where(and(...conditions))
-      .orderBy(asc(schema.sessionPages.pageNumber))
-      .all()
-    return rows.map((row) => this.normalizeSessionPageRow(row as Record<string, unknown>))
+    return this.sessionPageRepository.listSessionPages(sessionId, options)
   }
 
-  async replaceSourcePageSkeletons(args: {
-    sessionId: string
-    sourceDocumentPath: string
-    sourceDocumentName?: string | null
-    confidence?: SourcePageSkeletonConfidence
-    items: Array<{
-      pageNumber: number
-      title: string
-      role: SourcePageSkeletonRole
-      sourceHeading: string
-      headingLevel: number
-      lineStart: number
-      lineEnd: number
-      reason?: string | null
-      layoutIntent?: string | null
-      layoutId?: string | null
-    }>
-  }): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    await this.db
-      .delete(schema.sourcePageSkeletons)
-      .where(eq(schema.sourcePageSkeletons.sessionId, args.sessionId))
-      .run()
-    const values = args.items
-      .filter((item) => item.sourceHeading.trim().length > 0)
-      .map((item) => {
-        const pageNumber = Math.max(1, Math.floor(item.pageNumber))
-        const lineStart = Math.max(1, Math.floor(item.lineStart || 1))
-        const lineEnd = Math.max(lineStart, Math.floor(item.lineEnd || lineStart))
-        return {
-          id: `${args.sessionId}:${pageNumber}`,
-          sessionId: args.sessionId,
-          pageNumber,
-          title: item.title.trim() || `Slide ${pageNumber}`,
-          role: item.role === 'chapter-divider' ? 'chapter-divider' : 'content',
-          sourceDocumentPath: args.sourceDocumentPath,
-          sourceDocumentName: args.sourceDocumentName || null,
-          sourceHeading: item.sourceHeading,
-          headingLevel: Math.max(1, Math.floor(item.headingLevel || 1)),
-          lineStart,
-          lineEnd,
-          reason: item.reason || null,
-          layoutIntent: item.layoutIntent || null,
-          layoutId: item.layoutId || null,
-          confidence: args.confidence || 'high',
-          createdAt: now,
-          updatedAt: now
-        }
-      })
-    if (values.length === 0) return
-    await this.db.insert(schema.sourcePageSkeletons).values(values).run()
+  async replaceSourcePageSkeletons(args: ReplaceSourcePageSkeletonsArgs): Promise<void> {
+    return this.sessionPageRepository.replaceSourcePageSkeletons(args)
   }
 
-  async upsertSourcePageSkeleton(args: {
-    sessionId: string
-    pageNumber: number
-    title: string
-    role?: SourcePageSkeletonRole
-    sourceDocumentPath: string
-    sourceDocumentName?: string | null
-    sourceHeading: string
-    headingLevel?: number
-    lineStart?: number
-    lineEnd?: number
-    reason?: string | null
-    layoutIntent?: string | null
-    layoutId?: string | null
-    confidence?: SourcePageSkeletonConfidence
-  }): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    const pageNumber = Math.max(1, Math.floor(args.pageNumber))
-    const lineStart = Math.max(1, Math.floor(args.lineStart || pageNumber))
-    const lineEnd = Math.max(lineStart, Math.floor(args.lineEnd || lineStart))
-    const value = {
-      id: `${args.sessionId}:${pageNumber}`,
-      sessionId: args.sessionId,
-      pageNumber,
-      title: args.title.trim() || `Slide ${pageNumber}`,
-      role: args.role === 'chapter-divider' ? 'chapter-divider' : 'content',
-      sourceDocumentPath: args.sourceDocumentPath,
-      sourceDocumentName: args.sourceDocumentName || null,
-      sourceHeading: args.sourceHeading.trim(),
-      headingLevel: Math.max(1, Math.floor(args.headingLevel || 1)),
-      lineStart,
-      lineEnd,
-      reason: args.reason || null,
-      layoutIntent: args.layoutIntent || null,
-      layoutId: args.layoutId || null,
-      confidence: args.confidence || 'medium',
-      createdAt: now,
-      updatedAt: now
-    }
-    if (!value.sourceHeading) return
-    await this.db
-      .insert(schema.sourcePageSkeletons)
-      .values(value)
-      .onConflictDoUpdate({
-        target: schema.sourcePageSkeletons.id,
-        set: {
-          title: value.title,
-          role: value.role,
-          sourceDocumentPath: value.sourceDocumentPath,
-          sourceDocumentName: value.sourceDocumentName,
-          sourceHeading: value.sourceHeading,
-          headingLevel: value.headingLevel,
-          lineStart: value.lineStart,
-          lineEnd: value.lineEnd,
-          reason: value.reason,
-          layoutIntent: value.layoutIntent,
-          layoutId: value.layoutId,
-          confidence: value.confidence,
-          updatedAt: now
-        }
-      })
-      .run()
+  async upsertSourcePageSkeleton(args: UpsertSourcePageSkeletonArgs): Promise<void> {
+    return this.sessionPageRepository.upsertSourcePageSkeleton(args)
   }
 
   async deleteSourcePageSkeleton(sessionId: string, pageNumber: number): Promise<void> {
-    await this.db
-      .delete(schema.sourcePageSkeletons)
-      .where(
-        and(
-          eq(schema.sourcePageSkeletons.sessionId, sessionId),
-          eq(schema.sourcePageSkeletons.pageNumber, pageNumber)
-        )
-      )
-      .run()
+    return this.sessionPageRepository.deleteSourcePageSkeleton(sessionId, pageNumber)
   }
 
   async deleteSourcePageSkeletons(sessionId: string, pageNumbers: number[]): Promise<void> {
-    if (!Array.isArray(pageNumbers) || pageNumbers.length === 0) return
-    await this.db
-      .delete(schema.sourcePageSkeletons)
-      .where(
-        and(
-          eq(schema.sourcePageSkeletons.sessionId, sessionId),
-          inArray(schema.sourcePageSkeletons.pageNumber, pageNumbers)
-        )
-      )
-      .run()
+    return this.sessionPageRepository.deleteSourcePageSkeletons(sessionId, pageNumbers)
   }
 
   async listSourcePageSkeletons(sessionId: string): Promise<SourcePageSkeletonRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(schema.sourcePageSkeletons)
-      .where(eq(schema.sourcePageSkeletons.sessionId, sessionId))
-      .orderBy(asc(schema.sourcePageSkeletons.pageNumber))
-      .all()
-    return rows.map((row) => this.normalizeSourcePageSkeletonRow(row as Record<string, unknown>))
+    return this.sessionPageRepository.listSourcePageSkeletons(sessionId)
   }
 
   async upsertSessionPage(page: SessionPageInput): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    await this.db
-      .insert(schema.sessionPages)
-      .values({
-        id: page.id,
-        sessionId: page.sessionId,
-        legacyPageId: page.legacyPageId || null,
-        fileSlug: page.fileSlug,
-        pageNumber: page.pageNumber,
-        title: page.title,
-        htmlPath: page.htmlPath,
-        status: page.status || 'pending',
-        error: page.error || null,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null
-      })
-      .onConflictDoUpdate({
-        target: schema.sessionPages.id,
-        set: {
-          legacyPageId: page.legacyPageId || null,
-          fileSlug: page.fileSlug,
-          pageNumber: page.pageNumber,
-          title: page.title,
-          htmlPath: page.htmlPath,
-          status: page.status || 'pending',
-          error: page.error || null,
-          deletedAt: null,
-          updatedAt: now
-        }
-      })
-      .run()
+    return this.sessionPageRepository.upsertSessionPage(page)
   }
 
   async replaceSessionPageOrder(
     sessionId: string,
     pages: Array<{ id: string; pageNumber: number }>
   ): Promise<void> {
-    if (pages.length === 0) return
-    const now = Math.floor(Date.now() / 1000)
-    const pageIds = pages.map((page) => page.id)
-    const caseWhenFragments = pages.map(
-      (page) => sql`WHEN ${schema.sessionPages.id} = ${page.id} THEN ${page.pageNumber}`
-    )
-    const pageNumberExpr = sql<number>`CASE ${sql.join(caseWhenFragments, sql` `)} ELSE ${schema.sessionPages.pageNumber} END`
-    await this.db
-      .update(schema.sessionPages)
-      .set({
-        pageNumber: pageNumberExpr,
-        updatedAt: now
-      })
-      .where(
-        and(eq(schema.sessionPages.sessionId, sessionId), inArray(schema.sessionPages.id, pageIds))
-      )
-      .run()
+    return this.sessionPageRepository.replaceSessionPageOrder(sessionId, pages)
   }
 
-  async persistSessionPageState(data: {
-    sessionId: string
-    pages: Array<{ id: string; pageNumber: number }>
-    deletedPageIds?: string[]
-    metadata: object
-  }): Promise<void> {
-    const now = Math.floor(Date.now() / 1000)
-    await this.db.transaction(async (tx) => {
-      if (data.deletedPageIds?.length) {
-        await tx
-          .update(schema.sessionPages)
-          .set({ deletedAt: now, updatedAt: now })
-          .where(
-            and(
-              eq(schema.sessionPages.sessionId, data.sessionId),
-              inArray(schema.sessionPages.id, data.deletedPageIds)
-            )
-          )
-          .run()
-      }
-      if (data.pages.length > 0) {
-        const pageIds = data.pages.map((page) => page.id)
-        const caseWhenFragments = data.pages.map(
-          (page) => sql`WHEN ${schema.sessionPages.id} = ${page.id} THEN ${page.pageNumber}`
-        )
-        const pageNumberExpr = sql<number>`CASE ${sql.join(caseWhenFragments, sql` `)} ELSE ${schema.sessionPages.pageNumber} END`
-        await tx
-          .update(schema.sessionPages)
-          .set({ pageNumber: pageNumberExpr, updatedAt: now })
-          .where(
-            and(
-              eq(schema.sessionPages.sessionId, data.sessionId),
-              inArray(schema.sessionPages.id, pageIds)
-            )
-          )
-          .run()
-      }
-      await tx
-        .update(schema.sessions)
-        .set({ metadata: JSON.stringify(data.metadata), updatedAt: now })
-        .where(eq(schema.sessions.id, data.sessionId))
-        .run()
-    })
+  async persistSessionPageState(data: PersistSessionPageStateInput): Promise<void> {
+    return this.sessionPageRepository.persistSessionPageState(data)
   }
 
   async softDeleteSessionPages(sessionId: string, ids: string[]): Promise<void> {
-    if (!Array.isArray(ids) || ids.length === 0) return
-    const now = Math.floor(Date.now() / 1000)
-    await this.db
-      .update(schema.sessionPages)
-      .set({
-        deletedAt: now,
-        updatedAt: now
-      })
-      .where(
-        and(eq(schema.sessionPages.sessionId, sessionId), inArray(schema.sessionPages.id, ids))
-      )
-      .run()
+    return this.sessionPageRepository.softDeleteSessionPages(sessionId, ids)
   }
 
   async hardDeleteSessionPages(sessionId: string, ids: string[]): Promise<void> {
-    if (!Array.isArray(ids) || ids.length === 0) return
-    await this.db
-      .delete(schema.sessionPages)
-      .where(
-        and(eq(schema.sessionPages.sessionId, sessionId), inArray(schema.sessionPages.id, ids))
-      )
-      .run()
+    return this.sessionPageRepository.hardDeleteSessionPages(sessionId, ids)
   }
 
   // ========== Session History ==========

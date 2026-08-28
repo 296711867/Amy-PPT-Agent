@@ -8,15 +8,15 @@ const readSource = (relativePath: string): string =>
 describe('universal layout snapshot contract', () => {
   it('persists layout and image fields in generation page snapshots', () => {
     const schema = readSource('src/main/db/schema.ts')
-    const database = readSource('src/main/db/database.ts')
+    const repository = readSource('src/main/db/repositories/generation-run-repository.ts')
     const migration = readSource('src/main/db/patch/index.ts')
 
     expect(schema).toContain("layoutId: text('layout_id')")
     expect(schema).toContain("imageAssetPath: text('image_asset_path')")
     expect(schema).toContain("imageAssetPaths: text('image_asset_paths')")
-    expect(database).toContain('layout_id:')
-    expect(database).toContain('image_asset_path:')
-    expect(database).toContain('image_asset_paths:')
+    expect(repository).toContain('layout_id:')
+    expect(repository).toContain('image_asset_path:')
+    expect(repository).toContain('image_asset_paths:')
     expect(migration).toContain('ALTER TABLE generation_pages ADD COLUMN layout_id TEXT')
     expect(migration).toContain('ALTER TABLE generation_pages ADD COLUMN image_asset_path TEXT')
     expect(migration).toContain('ALTER TABLE generation_pages ADD COLUMN image_asset_paths TEXT')

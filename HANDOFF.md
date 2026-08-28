@@ -32,9 +32,9 @@
 ### 数据层（2026-08 拆分，门面 + 仓库模式）
 
 - `db/records.ts` — 全部行类型与字符串联合类型（`SessionJobKind` 等），`database.ts` `export *` 兜底旧导入路径
-- `db/repositories/` — 7 个仓库类（config / project / html-editor / image-generation-history / session-style-snapshot / thumbnail / user-preference），按表聚合 CRUD
+- `db/repositories/` — 9 个仓库类（config / project / html-editor / image-generation-history / session-style-snapshot / thumbnail / user-preference / **generation-run** / **session-page**），按表聚合 CRUD；生成运行/任务/页面与会话页面/源骨架已全部下沉
 - `db/services/` — 跨仓库业务（`session-style-snapshot-service`）
-- `db/database.ts`（2767 行，原 3758）— `PPTDatabase` 门面：持有仓库实例、委托调用，session/run/页面等核心表仍在门面内
+- `db/database.ts`（2039 行，原 3758）— `PPTDatabase` 门面：持有仓库实例、委托调用，session 核心/事件/操作历史/消息记忆/样式等仍在门面内
 - 迁移仍在 `db/patch/index.ts`（~1650 行，不要动历史 patch）
 
 ### 会话详情页组件树（2026-08 拆分）
@@ -83,6 +83,7 @@
 18. **标题带 deck 级统一**（Unreleased）：反转三处"标题位置逐页变化"指令（deck-system 提示词 / `amy-ppt-layout` 技能 §6 / 专家文案），标题带（对齐、字号档位、kicker/装饰、标题-内容间距）写入 deck 级硬契约，`deck-title-anchor-drift` 升为 error 级并增加标题字号中位漂移检测；封面/金句/全图页豁免
 19. **演示级字号/图标默认值**（Unreleased）：1600×900 画布默认值正文 20→24px、模块标题 24→28px、副标题 26→28px、页标题 40→48px（与运行时 48px 强制值对齐）、重点数字 52→56px、图标底托 52→64px、卡片内边距 24→32px；高度预算超限时必须先删文案/合并模块，禁止缩字号硬塞。设置 → 排版规则中仍可按会话覆盖这些值
 20. **可维护性大拆分**（Unreleased，纯结构无行为变化）：`database.ts` 3758→2767（拆出 `records.ts` + 7 个 repositories + services）、`agent-runner.ts` 2595→1800（拆出 `planning/` 4 件套 + `agent-stream-processor`）、`session-detail.tsx` 1894→1270（拆出 `components/session-detail/` 98 文件组件树 + hooks）、`PreviewIframe`/`HtmlEditorCanvas` 共享 `presentation-webview/`。同步修复 7 个因搬家/默认值/仓库名过期而失败的测试；Windows 无符号链接权限时 symlink 测试自跳过。全量 335 测试文件 + typecheck 双绿
+21. **数据层下沉收尾**（Unreleased，纯结构无行为变化）：生成运行/会话任务/生成页面下沉到 `generation-run-repository`，会话页面/源页面骨架下沉到 `session-page-repository`，`database.ts` 2767→2039，仓库总数 9 个；补 6 个仓库定向测试（run/job 生命周期、页面快照、软硬删除、排序、骨架替换）。全量 337 测试文件 + typecheck 双绿
 
 ## 4. 打包发布 SOP（含踩过的坑）⚠️ 必读
 
