@@ -40,6 +40,7 @@
 
 ## Verification Snapshot (2026-08-29)
 
+- Dev logs now rotate daily with a 7-day prune (logs/main-YYYY-MM-DD.log); deck quality and narrative review outcomes persist into session_events (deck-quality/reviewed, deck-narrative/reviewed) for UI timelines; check-prompt-cache.mjs now reports title-band anchor health (bare-band warnings) and render-validation resilience alongside fingerprint stability.
 - Dependency audit closed: all 61 runtime and 27 dev dependencies verified in use (ESM/dynamic/require/postcss-plugin/tsconfig reference forms); zero removal candidates, lockfile root importer fully consistent with package.json. Radix packages are direct deps with live wrappers; react-slot et al. remain only as normal Radix-internal transitives.
 
 - The Agent cost, telemetry, pnpm, dependency-cleanup, composer-extraction, and cache-verification work above is committed and pushed to `origin/main`.
