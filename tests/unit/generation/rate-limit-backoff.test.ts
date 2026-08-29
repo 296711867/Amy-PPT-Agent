@@ -84,7 +84,9 @@ describe('resolveRateLimitBackoff', () => {
 
 describe('agent-runner rate limit retry wiring', () => {
   it('handles rate limit backoff before the system-scope break in the page retry loop', () => {
-    const source = fs.readFileSync('src/main/generation/agent-runner.ts', 'utf8')
+    // The page retry loop moved out of agent-runner into the single-page
+    // generator; the wiring contract follows the code.
+    const source = fs.readFileSync('src/main/generation/single-page-generator.ts', 'utf8')
     const rateLimitBranch = source.indexOf(
       "if (failure.code === 'MODEL_RATE_LIMIT') {"
     )

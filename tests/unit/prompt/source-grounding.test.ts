@@ -147,7 +147,7 @@ describe('source-grounded prompt rules', () => {
   it('deck edit staggers three independent page agents to reduce rate-limit bursts', () => {
     const batchFlow = readSource('src/main/generation/edit-deck-batch-flow.ts')
     const deckAllPageEditFlow = readSource('src/main/generation/edit-deck-allpage-flow.ts')
-    const engine = readSource('src/main/generation/agent-runner.ts')
+    const editRunner = readSource('src/main/generation/deck-edit-runner.ts')
 
     expect(batchFlow).toContain('export const BATCH_EDIT_LAUNCH_STAGGER_MS = 100')
     expect(batchFlow).toContain('import pLimit from')
@@ -157,7 +157,7 @@ describe('source-grounded prompt rules', () => {
     expect(deckAllPageEditFlow).toContain('runPageAttempt')
     expect(deckAllPageEditFlow).toContain('selectPageIds: [pageId]')
     expect(deckAllPageEditFlow).toContain('isDeckEditRateLimitRetryableError(error)')
-    expect(engine).toContain('setPageAgent(args.sessionId, concurrentDeckPageId, editAgent)')
+    expect(editRunner).toContain('setPageAgent(args.sessionId, concurrentDeckPageId, editAgent)')
   })
 
   it('keeps generation progress in the local page surfaces without a modal', () => {
@@ -197,22 +197,23 @@ describe('source-grounded prompt rules', () => {
   it('keeps concurrent deck-page progress on the active page instead of resetting to understanding', () => {
     const deckAllPageEditFlow = readSource('src/main/generation/edit-deck-allpage-flow.ts')
     const batchFlow = readSource('src/main/generation/edit-deck-batch-flow.ts')
-    const engine = readSource('src/main/generation/agent-runner.ts')
+    const editRunner = readSource('src/main/generation/deck-edit-runner.ts')
 
     expect(deckAllPageEditFlow).toContain("'正在准备批量编辑'")
-    expect(engine).toContain('`正在编辑页面 ${concurrentDeckPageId}`')
-    expect(engine).toContain("'正在生成并校验当前页面'")
+    expect(editRunner).toContain('`正在编辑页面 ${concurrentDeckPageId}`')
+    expect(editRunner).toContain("'正在生成并校验当前页面'")
     expect(batchFlow).toContain('`正在编辑 P${args.pageNumber}`')
   })
 
   it('uses operation-specific progress copy for add-page and failed-page retries', () => {
-    const engine = readSource('src/main/generation/agent-runner.ts')
+    const runner = readSource('src/main/generation/agent-runner.ts')
+    const generationTypes = readSource('src/main/generation/deck-generation-types.ts')
     const addPageFlow = readSource('src/main/generation/add-page-flow.ts')
     const retrySinglePageFlow = readSource('src/main/generation/retry-single-page-flow.ts')
     const retryFlow = readSource('src/main/generation/retry-flow.ts')
 
-    expect(engine).toContain('renderingLabel?: string')
-    expect(engine).toContain(
+    expect(generationTypes).toContain('renderingLabel?: string')
+    expect(runner).toContain(
       "const renderingLabel = args.renderingLabel || progressText(args.appLocale, 'generating')"
     )
     expect(addPageFlow).toContain("'正在规划新增页面'")

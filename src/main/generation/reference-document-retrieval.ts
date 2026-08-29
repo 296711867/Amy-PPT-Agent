@@ -36,7 +36,7 @@ type SearchInput = {
   userMessage: string
 }
 
-type ReferenceDocumentRetriever = {
+export type ReferenceDocumentRetriever = {
   search: (input: SearchInput) => ReferenceDocumentSnippet[]
 }
 
