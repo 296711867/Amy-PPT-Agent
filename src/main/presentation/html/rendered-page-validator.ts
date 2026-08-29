@@ -60,9 +60,12 @@ const SCALE_FLOOR = 0.92
 const EDGE_TOLERANCE_PX = 2
 const OVERLAP_MIN_RATIO = 0.2
 const OVERLAP_MIN_AXIS_PX = 3
-const VALIDATION_TIMEOUT_MS = 10_000
+// 隐藏校验窗口每次超时后被销毁，下一页要付完整冷启动（新 renderer + 字体 + GPU）。
+// 高负载机器上 10s 会让整套页面全部误判超时（实测 6/6 页 render validation timeout），
+// 抬到 25s 并在超时后用新窗口重试一次。
+const VALIDATION_TIMEOUT_MS = 25_000
+const VALIDATION_TIMEOUT_ATTEMPTS = 2
 const MASTER_STYLE_TIMEOUT_MS = 5_000
-
 const intersection = (a: RenderedRect, b: RenderedRect): RenderedRect => {
   const x = Math.max(a.x, b.x)
   const y = Math.max(a.y, b.y)
@@ -459,6 +462,55 @@ const WAIT_FOR_RENDERED_PAGE_READY_SCRIPT = `
 })()
 `
 
+const isRenderValidationTimeout = (error: unknown): boolean =>
+  error instanceof Error && error.message.includes('render validation timeout')
+
+const inspectRenderedPageOnce = async (args: {
+  pageId: string
+  targetPath: string
+  slideSize: SlideSizePreset
+}): Promise<{ available: true; snapshot: RenderedPageSnapshot }> => {
+  if (!fs.existsSync(args.targetPath)) throw new Error('page file is missing after write')
+  const window = ensureValidationWindow(args.slideSize)
+  const pageUrl = new URL(pathToFileURL(args.targetPath).toString())
+  pageUrl.searchParams.set('pageId', args.pageId)
+  pageUrl.searchParams.set('_ts', String(Date.now()))
+  pageUrl.searchParams.set(
+    '_pptMasterExpected',
+    fs.existsSync(path.join(path.dirname(args.targetPath), 'master', 'master.css')) ? '1' : '0'
+  )
+  pageUrl.searchParams.set(
+    '_pptMasterElementsExpected',
+    fs.existsSync(path.join(path.dirname(args.targetPath), 'master', 'master.html')) ? '1' : '0'
+  )
+  await withTimeout(window.loadURL(pageUrl.toString()), VALIDATION_TIMEOUT_MS)
+  await withTimeout(
+    window.webContents.executeJavaScript(WAIT_FOR_RENDERED_PAGE_READY_SCRIPT, true),
+    VALIDATION_TIMEOUT_MS
+  )
+  const snapshot = await withTimeout(
+    window.webContents.executeJavaScript(COLLECT_RENDERED_PAGE_SNAPSHOT_SCRIPT, true),
+    VALIDATION_TIMEOUT_MS
+  )
+  return { available: true, snapshot: snapshot as RenderedPageSnapshot }
+}
+
+const reportValidationUnavailable = (args: {
+  pageId: string
+  targetPath: string
+  error: unknown
+}): { available: false; unavailableReason: string } => {
+  const unavailableReason =
+    args.error instanceof Error ? args.error.message : String(args.error)
+  log.warn('[deepagent] rendered page validation unavailable', {
+    pageId: args.pageId,
+    targetPath: args.targetPath,
+    unavailableReason
+  })
+  destroyValidationWindow()
+  return { available: false, unavailableReason }
+}
+
 const inspectRenderedPage = async (args: {
   pageId: string
   targetPath: string
@@ -467,40 +519,23 @@ const inspectRenderedPage = async (args: {
   | { available: true; snapshot: RenderedPageSnapshot }
   | { available: false; unavailableReason: string }
 > => {
-  try {
-    if (!fs.existsSync(args.targetPath)) throw new Error('page file is missing after write')
-    const window = ensureValidationWindow(args.slideSize)
-    const pageUrl = new URL(pathToFileURL(args.targetPath).toString())
-    pageUrl.searchParams.set('pageId', args.pageId)
-    pageUrl.searchParams.set('_ts', String(Date.now()))
-    pageUrl.searchParams.set(
-      '_pptMasterExpected',
-      fs.existsSync(path.join(path.dirname(args.targetPath), 'master', 'master.css')) ? '1' : '0'
-    )
-    pageUrl.searchParams.set(
-      '_pptMasterElementsExpected',
-      fs.existsSync(path.join(path.dirname(args.targetPath), 'master', 'master.html')) ? '1' : '0'
-    )
-    await withTimeout(window.loadURL(pageUrl.toString()), VALIDATION_TIMEOUT_MS)
-    await withTimeout(
-      window.webContents.executeJavaScript(WAIT_FOR_RENDERED_PAGE_READY_SCRIPT, true),
-      VALIDATION_TIMEOUT_MS
-    )
-    const snapshot = await withTimeout(
-      window.webContents.executeJavaScript(COLLECT_RENDERED_PAGE_SNAPSHOT_SCRIPT, true),
-      VALIDATION_TIMEOUT_MS
-    )
-    return { available: true, snapshot: snapshot as RenderedPageSnapshot }
-  } catch (error) {
-    const unavailableReason = error instanceof Error ? error.message : String(error)
-    log.warn('[deepagent] rendered page validation unavailable', {
-      pageId: args.pageId,
-      targetPath: args.targetPath,
-      unavailableReason
-    })
-    destroyValidationWindow()
-    return { available: false, unavailableReason }
+  for (let attempt = 1; attempt <= VALIDATION_TIMEOUT_ATTEMPTS; attempt += 1) {
+    try {
+      return await inspectRenderedPageOnce(args)
+    } catch (error) {
+      // 超时大概率是环境问题（冷启动窗口/字体/GPU），换一个新窗口重试一次；
+      // 非超时错误（文件缺失、脚本异常）重试没有意义。
+      const timedOut = isRenderValidationTimeout(error) && attempt < VALIDATION_TIMEOUT_ATTEMPTS
+      if (!timedOut) return reportValidationUnavailable({ ...args, error })
+      destroyValidationWindow()
+      log.warn('[deepagent] rendered page validation timed out, retrying once', {
+        pageId: args.pageId,
+        targetPath: args.targetPath,
+        attempt
+      })
+    }
   }
+  return { available: false, unavailableReason: 'render validation timeout' }
 }
 
 export type RenderedPageInspectionResult =

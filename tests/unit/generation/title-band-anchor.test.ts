@@ -56,6 +56,46 @@ describe('title band anchor extraction', () => {
     expect(extractTitleBandHtml(persistedPage(huge))).toBeNull()
   })
 
+  it('never anchors from placeholder scaffold pages still awaiting model content', () => {
+    // 并行生成时邻居页可能还是占位页；占位裸带一旦当锚点会被"必须复刻"
+    // 硬指令传播成整套标题带（实际事故：page-3 残留占位样式）。
+    const placeholderPage = `<!doctype html><html><body>
+      <main class="ppt-page-root" data-ppt-guard-root="1"><div class="ppt-page-fit-scope"><div class="ppt-page-content">
+        <section class="scaffold-card" data-page-scaffold="1" data-placeholder-page="1">
+          <main data-block-id="content" data-role="content">
+            <h1 class="scaffold-title" data-block-id="title" data-role="title">实习基本概况</h1>
+            <div class="scaffold-hint">等待模型填充这一页内容</div>
+          </main>
+        </section>
+      </div></div></main>
+    </body></html>`
+
+    expect(extractTitleBandHtml(placeholderPage)).toBeNull()
+  })
+
+  it('skips placeholder neighbors and anchors from the next written page', async () => {
+    const readPageHtml = vi.fn(async (filePath: string) =>
+      filePath === '/p/2.html'
+        ? persistedPage(
+            '<section data-page-scaffold="1" data-placeholder-page="1"><h1 data-role="title">占位</h1></section>'
+          )
+        : filePath === '/p/3.html'
+          ? persistedPage(conventionalBand)
+          : persistedPage('<div>无标题带</div>')
+    )
+    const anchor = await resolveTitleBandAnchor({
+      candidates: [
+        { pageId: 'pg-1', pageNumber: 1, layoutIntent: 'cover' as const, htmlPath: '/p/1.html' },
+        { pageId: 'pg-2', pageNumber: 2, layoutIntent: 'concept' as const, htmlPath: '/p/2.html' },
+        { pageId: 'pg-3', pageNumber: 3, layoutIntent: 'process' as const, htmlPath: '/p/3.html' }
+      ],
+      readPageHtml
+    })
+
+    expect(anchor).toMatchObject({ pageId: 'pg-3', pageNumber: 3 })
+    expect(anchor?.bandHtml).toContain('季度增长复盘')
+  })
+
   it('flags cover, quote, and image-focus pages as anchor-exempt', () => {
     expect(isTitleBandAnchorExemptIntent('cover')).toBe(true)
     expect(isTitleBandAnchorExemptIntent('quote')).toBe(true)

@@ -103,12 +103,16 @@ export const buildBasePageStyleTag = (input: SlideSizePreset): string => {
     min-width: 0;
   }
   [data-role="title"] h1,
-  header[data-block-id="title"] h1 {
+  header[data-block-id="title"] h1,
+  h1[data-role="title"],
+  h1[data-block-id="title"] {
     font-size: 48px !important;
     line-height: 1.2 !important;
   }
   [data-role="title"] h1.text-5xl,
-  header[data-block-id="title"] h1.text-5xl {
+  header[data-block-id="title"] h1.text-5xl,
+  h1[data-role="title"].text-5xl,
+  h1[data-block-id="title"].text-5xl {
     font-size: 48px !important;
   }
 </style>`

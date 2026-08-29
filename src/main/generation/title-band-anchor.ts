@@ -23,15 +23,21 @@ const EXEMPT_TITLE_BAND_INTENTS = new Set<LayoutIntent>(['cover', 'quote', 'imag
 // 标题带是短标记；异常超长说明抓到的不是常规标题带，放弃当锚点。
 const MAX_BAND_HTML_LENGTH = 2000
 
+// 生成前的占位页模板（buildPageScaffoldHtml，"等待模型填充这一页内容"）
+// 也带 [data-role="title"]，把它的占位裸带当锚点会把整套标题带传播成占位样式。
+const isPlaceholderPageHtml = (pageHtml: string): boolean =>
+  pageHtml.includes('data-placeholder-page="1"') || pageHtml.includes('scaffold-hint')
+
 export const isTitleBandAnchorExemptIntent = (intent: unknown): boolean =>
   typeof intent === 'string' && EXEMPT_TITLE_BAND_INTENTS.has(intent as LayoutIntent)
 
 /**
  * 从已落盘页面 HTML 中提取标题带（[data-role="title"]，退化到
  * [data-block-id="title"]）的外层标记。空白归一化后返回，失败返回 null。
+ * 占位页返回 null：邻居页可能尚未被模型覆盖，不能提供正式版式。
  */
 export function extractTitleBandHtml(pageHtml: string): string | null {
-  if (!pageHtml) return null
+  if (!pageHtml || isPlaceholderPageHtml(pageHtml)) return null
   try {
     const $ = cheerio.load(pageHtml, { scriptingEnabled: false })
     // 落盘页文件只含单页外壳，标题带全文档唯一；优先 data-role，退化到 data-block-id。

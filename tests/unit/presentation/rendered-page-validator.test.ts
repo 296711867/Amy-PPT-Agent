@@ -122,3 +122,26 @@ describe('rendered page validator', () => {
     ])
   })
 })
+
+describe('render validation timeout resilience (source contract)', () => {
+  it('raises the per-step timeout and retries once on timeout with a fresh window', () => {
+    const fs = require('fs')
+    const source = fs.readFileSync('src/main/presentation/html/rendered-page-validator.ts', 'utf8')
+
+    // 实测事故：高负载机器上 10s 冷启动超时导致整套 6/6 页被误判失败。
+    expect(source).toContain('VALIDATION_TIMEOUT_MS = 25_000')
+    expect(source).toContain('VALIDATION_TIMEOUT_ATTEMPTS = 2')
+    expect(source).toContain("error.message.includes('render validation timeout')")
+    expect(source).toContain('retrying once')
+  })
+
+  it('keeps a 48px floor on bare h1 title elements in the runtime shell', () => {
+    const fs = require('fs')
+    const source = fs.readFileSync('src/main/presentation/html/page-shell.ts', 'utf8')
+
+    // 裸 <h1 data-role="title">（元素自身带角色而非容器）此前命中不了
+    // [data-role="title"] h1 选择器，标题会缩到正文级。
+    expect(source).toContain('h1[data-role="title"]')
+    expect(source).toContain('h1[data-block-id="title"]')
+  })
+})
