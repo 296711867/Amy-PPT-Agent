@@ -60,6 +60,32 @@ describe('single-page agent user prompt composer', () => {
     expect(prompt).toContain('classified as a cover')
   })
 
+  it('injects the deck title band anchor as a hard requirement before page data', () => {
+    const prompt = buildSinglePageAgentUserPrompt({
+      ...baseArgs,
+      titleBandAnchor: {
+        pageId: 'pg-02',
+        pageNumber: 2,
+        bandHtml:
+          '<header data-role="title" style="position:absolute;top:36px;left:96px;"><h1 style="font-size:40px;">季度增长复盘</h1></header>'
+      }
+    })
+
+    expect(prompt).toContain('Deck title band anchor (hard requirement):')
+    expect(prompt).toContain('anchor: page 2, pg-02')
+    expect(prompt).toContain('Do not invent a new alignment, size, decoration, or position')
+    expect(prompt).toContain('<header data-role="title"')
+    expect(prompt.indexOf('Deck title band anchor')).toBeLessThan(
+      prompt.indexOf('Target page: page-1')
+    )
+  })
+
+  it('omits the anchor block when no anchor is available', () => {
+    const prompt = buildSinglePageAgentUserPrompt({ ...baseArgs, titleBandAnchor: null })
+
+    expect(prompt).not.toContain('Deck title band anchor')
+  })
+
   it('keeps the composed prompt measurable with the log-safe metrics helper', () => {
     const prompt = buildSinglePageAgentUserPrompt({ ...baseArgs })
     const metrics = measurePromptText(prompt)

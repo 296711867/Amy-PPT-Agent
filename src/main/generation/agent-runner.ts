@@ -51,6 +51,7 @@ import {
 } from './page-write-failure'
 import { persistPageHtmlFromFragment } from '../presentation/html/page-writer-core'
 import { validateAssignedDeckBackground } from './deck-backgrounds'
+import { resolveTitleBandAnchor } from './title-band-anchor'
 import {
   formatDeckQualityFeedback,
   inspectPresentationDeckQuality,
@@ -567,6 +568,34 @@ export const runDeepAgentDeckGeneration = async (args: {
 
     try {
       const combinedSignal = modelCallSignal(args.modelTimeoutMs, 'agent', args.signal)
+      // 标题带锚点：其它常规页按页码升序优先，重试页自身旧版兜底。
+      // 模板导入流程有自身的骨架保留规则，不注入锚点以免互相冲突。
+      const titleBandAnchor = args.requireTemplatePageRead
+        ? null
+        : await resolveTitleBandAnchor({
+            candidates: [
+              ...pageRefs
+                .filter((ref) => ref.pageId !== page.pageId)
+                .sort((a, b) => a.pageNumber - b.pageNumber)
+                .map((ref) => ({
+                  pageId: ref.pageId,
+                  pageNumber: ref.pageNumber,
+                  layoutIntent: ref.layoutIntent,
+                  htmlPath: args.pageFileMap[ref.pageId]
+                })),
+              ...(retryContext && beforePageHtml
+                ? [
+                    {
+                      pageId: page.pageId,
+                      pageNumber: page.pageNumber,
+                      layoutIntent: page.layoutIntent,
+                      pageHtml: beforePageHtml
+                    }
+                  ]
+                : [])
+            ],
+            readPageHtml: readPageHtmlIfExists
+          })
       const userPrompt = buildSinglePageAgentUserPrompt({
         topic: args.topic,
         deckTitle: args.deckTitle,
@@ -579,13 +608,21 @@ export const runDeepAgentDeckGeneration = async (args: {
         page,
         sourceDocumentPaths: pageSourceDocumentPaths,
         referenceDocumentSnippets,
-        retryContext
+        retryContext,
+        titleBandAnchor
       })
       log.info('[deepagent] single-page prompt metrics', {
         sessionId: args.sessionId,
         pageId: page.pageId,
         worker: workerLabel,
         generationMode: args.generationMode ?? 'generate',
+        titleBandAnchor: titleBandAnchor
+          ? {
+              pageId: titleBandAnchor.pageId,
+              pageNumber: titleBandAnchor.pageNumber,
+              bandHtmlLength: titleBandAnchor.bandHtml.length
+            }
+          : null,
         userPromptMetrics: measurePromptText(userPrompt)
       })
       const stream = await deepAgent.stream(

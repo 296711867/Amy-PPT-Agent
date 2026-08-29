@@ -30,8 +30,9 @@ export interface SinglePageAgentUserPromptPage {
 
 /**
  * 单页生成的完整 agent user prompt：运行级附加说明、重试修复指令、模板页
- * 强制读取说明、模板页角色约束，加上页面级数据 prompt。逐页变量全部在这里，
- * system prompt 保持 deck 级稳定，便于 provider 端 prompt cache 命中。
+ * 强制读取说明、模板页角色约束、deck 标题带锚点，加上页面级数据 prompt。
+ * 逐页变量全部在这里，system prompt 保持 deck 级稳定，便于 provider 端
+ * prompt cache 命中。
  */
 export function buildSinglePageAgentUserPrompt(args: {
   topic: string
@@ -50,6 +51,12 @@ export function buildSinglePageAgentUserPrompt(args: {
     maxRetries: number
     previousError: string
   }
+  /** 同 deck 已写页面抽出的标题带锚点：重生成/重试页必须复刻该版式。 */
+  titleBandAnchor?: {
+    pageId: string
+    pageNumber: number
+    bandHtml: string
+  } | null
 }): string {
   const { page } = args
   const writeToolName: 'update_single_page_file' | 'update_template_page_file' =
@@ -82,6 +89,16 @@ export function buildSinglePageAgentUserPrompt(args: {
       : '',
     isValidTemplatePageRole(page.templatePageRole)
       ? `The template base for this slide was classified as a ${describeTemplatePageRole(page.templatePageRole).en} (${describeTemplatePageRole(page.templatePageRole).zh}). Keep that structural role: preserve the composition and hierarchy of the base (e.g. a cover base stays a cover, a data base keeps chart/table prominence) while replacing the old content.`
+      : '',
+    args.titleBandAnchor
+      ? [
+          'Deck title band anchor (hard requirement):',
+          `- Pages already written in this deck use the title band markup below (anchor: page ${args.titleBandAnchor.pageNumber}, ${args.titleBandAnchor.pageId}).`,
+          '- Reuse this exact band for this page: same element structure, alignment, font-size tier, kicker/rule treatment, colors, margins, and title-to-content gap.',
+          "- Replace only the title (and kicker) text with this page's title. Do not invent a new alignment, size, decoration, or position for the title band.",
+          'Anchor band markup:',
+          args.titleBandAnchor.bandHtml
+        ].join('\n')
       : '',
     buildSinglePageGenerationPrompt({
       topic: args.topic,
