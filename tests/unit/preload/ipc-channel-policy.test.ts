@@ -1,4 +1,5 @@
 import fs from 'fs'
+import path from 'path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   IPC_EVENT_CHANNELS,
@@ -7,7 +8,17 @@ import {
   isAllowedIpcInvokeChannel
 } from '../../../src/shared/ipc-channels'
 
-const rendererIpcSource = fs.readFileSync('src/renderer/src/lib/ipc.ts', 'utf-8')
+// The renderer IPC facade is split by domain under lib/ipc/; the policy must
+// scan every module so no channel escapes the allowlist.
+const rendererIpcSource = [
+  'src/renderer/src/lib/ipc.ts',
+  ...fs
+    .readdirSync('src/renderer/src/lib/ipc')
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => path.join('src/renderer/src/lib/ipc', name))
+]
+  .map((filePath) => fs.readFileSync(filePath, 'utf-8'))
+  .join('\n')
 
 function extractChannels(pattern: RegExp): string[] {
   return Array.from(rendererIpcSource.matchAll(pattern), (match) => match[1]).filter(
