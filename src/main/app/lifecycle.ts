@@ -7,6 +7,7 @@ import { mkdirSync } from 'fs'
 import type { UpdateAvailablePayload } from '@shared/app-update'
 import { isRepeatedRendererCrash, shouldRecoverRenderer } from './renderer-recovery'
 import { canUseConsoleTransport, installLoggingStreamGuards } from './logging-stream-guard'
+import { pruneDevLogs, resolveDevLogPath } from './dev-log-rotation'
 import { APP_NAME, resolveUpdateManifestUrl } from '@shared/brand'
 
 const UPDATE_MANIFEST_URL = resolveUpdateManifestUrl()
@@ -25,9 +26,11 @@ export function configureLogging(): void {
   log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}'
 
   if (is.dev) {
+    // dev 日志按日期分文件并在启动时剪枝，避免单文件无限增长。
     const logDir = join(process.cwd(), 'logs')
     mkdirSync(logDir, { recursive: true })
-    log.transports.file.resolvePathFn = () => join(logDir, 'main.log')
+    log.transports.file.resolvePathFn = () => resolveDevLogPath(logDir)
+    pruneDevLogs(logDir)
   } else {
     log.transports.file.resolvePathFn = () => {
       const now = dayjs()

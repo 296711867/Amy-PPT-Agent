@@ -863,6 +863,8 @@ export async function executeDeckGeneration(
   })
   if (llmPageRefs.length > 0) {
     agentOutcome = await runDeepAgentDeckGeneration({
+      appendSessionEvent: (data) =>
+        db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
     sessionId: context.sessionId,
     provider: context.provider,
     apiKey: context.apiKey,

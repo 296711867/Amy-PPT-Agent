@@ -25,6 +25,59 @@ import type { SinglePageGenerator } from './single-page-generator'
 
 export type DeckPageFailure = { pageId: string; title: string; reason: string }
 
+/** deck 质量评审结果 → session_events 载荷（纯函数，便于单测与 UI 消费）。 */
+export const buildDeckQualityReviewEventPayload = (input: {
+  available: boolean
+  reviewedPages: number
+  violations: Array<{ code: string; severity: string; pageIds: string[] }>
+  repairedPageIds: string[]
+  repairFailurePageIds: string[]
+  skipped: boolean
+}): Record<string, unknown> => ({
+  available: input.available,
+  skipped: input.skipped,
+  reviewedPages: input.reviewedPages,
+  errorCount: input.violations.filter((v) => v.severity === 'error').length,
+  warnCount: input.violations.filter((v) => v.severity === 'warn').length,
+  codes: [...new Set(input.violations.map((v) => v.code))],
+  repairedPageIds: input.repairedPageIds,
+  repairFailurePageIds: input.repairFailurePageIds,
+  violations: input.violations.map((v) => ({
+    code: v.code,
+    severity: v.severity,
+    pageIds: v.pageIds
+  }))
+})
+
+export const buildDeckNarrativeReviewEventPayload = (input: {
+  semanticAvailable: boolean
+  staticIssues: Array<{ code: string; severity: string; pageIds: string[] }>
+  semanticIssues: Array<{ code: string; severity: string; pageIds: string[] }>
+  repairedPageIds: string[]
+  skipped: boolean
+}): Record<string, unknown> => ({
+  semanticAvailable: input.semanticAvailable,
+  skipped: input.skipped,
+  staticErrorCount: input.staticIssues.filter((v) => v.severity === 'error').length,
+  staticWarnCount: input.staticIssues.filter((v) => v.severity === 'warn').length,
+  semanticErrorCount: input.semanticIssues.filter((v) => v.severity === 'error').length,
+  semanticWarnCount: input.semanticIssues.filter((v) => v.severity === 'warn').length,
+  repairedPageIds: input.repairedPageIds
+})
+
+const recordReviewEvent = async (
+  appendSessionEvent: DeckGenerationArgs['appendSessionEvent'],
+  eventType: string,
+  payload: Record<string, unknown>
+): Promise<void> => {
+  if (!appendSessionEvent) return
+  try {
+    await appendSessionEvent({ eventType, actor: 'system', payload })
+  } catch {
+    // 事件落盘失败不影响生成与评审
+  }
+}
+
 export const runDeckReviewAndRepair = async (context: {
   args: DeckGenerationArgs
   pageRefs: PageRef[]
@@ -110,6 +163,7 @@ export const runDeckReviewAndRepair = async (context: {
     const repairPageIds = Array.from(
       new Set(hardViolations.flatMap((violation) => violation.pageIds))
     )
+    const qualityRepairFailurePageIds: string[] = []
     for (const pageId of repairPageIds) {
       if (args.signal?.aborted) {
         throw new Error(uiText(args.appLocale, '生成已取消', 'Generation canceled'))
@@ -143,6 +197,7 @@ export const runDeckReviewAndRepair = async (context: {
         )
       } catch (error) {
         const reason = `Deck 质量定向修复失败：${error instanceof Error ? error.message : String(error)}`
+        qualityRepairFailurePageIds.push(pageId)
         failedPages.push({ pageId, title: page.title, reason })
         await args.onPageFailed?.({
           pageNumber: page.pageNumber,
@@ -185,6 +240,24 @@ export const runDeckReviewAndRepair = async (context: {
       })
     }
     deckQualityWarnings = deckReport.violations.filter((violation) => violation.severity === 'warn')
+    await recordReviewEvent(
+      args.appendSessionEvent,
+      'deck-quality/reviewed',
+      buildDeckQualityReviewEventPayload({
+        available: deckReport.available,
+        reviewedPages: deckReport.pages.length,
+        violations: deckReport.violations.map((violation) => ({
+          code: violation.code,
+          severity: violation.severity,
+          pageIds: violation.pageIds
+        })),
+        repairedPageIds: repairPageIds.filter(
+          (pageId) => !qualityRepairFailurePageIds.includes(pageId)
+        ),
+        repairFailurePageIds: qualityRepairFailurePageIds,
+        skipped: false
+      })
+    )
     progress.emitRenderingStatus({
       label: progressLabel(
         args.appLocale,
@@ -343,7 +416,39 @@ export const runDeckReviewAndRepair = async (context: {
         })),
         repairedPageIds: repairPageIds
       })
+      await recordReviewEvent(
+        args.appendSessionEvent,
+        'deck-narrative/reviewed',
+        buildDeckNarrativeReviewEventPayload({
+          semanticAvailable: semanticReview.available,
+          staticIssues: narrativeReport.violations.map((issue) => ({
+            code: issue.code,
+            severity: issue.severity,
+            pageIds: issue.pageIds
+          })),
+          semanticIssues: semanticReview.issues.map((issue) => ({
+            code: issue.code,
+            severity: issue.severity,
+            pageIds: issue.pageIds
+          })),
+          repairedPageIds: repairPageIds,
+          skipped: false
+        })
+      )
     }
+  } else {
+    await recordReviewEvent(
+      args.appendSessionEvent,
+      'deck-quality/reviewed',
+      buildDeckQualityReviewEventPayload({
+        available: false,
+        reviewedPages: 0,
+        violations: [],
+        repairedPageIds: [],
+        repairFailurePageIds: [],
+        skipped: true
+      })
+    )
   }
   return { deckQualityWarnings, deckNarrativeWarnings }
 }

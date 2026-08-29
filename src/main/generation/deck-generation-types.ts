@@ -76,6 +76,15 @@ export type DeckGenerationArgs = {
   }) => Promise<void>
   runId?: string
   signal?: AbortSignal
+  /**
+   * 可选的会话事件落盘回调（由持有 db 的调用方注入）。
+   * 生成编排层用它把 deck 评审结果写进 session_events，失败不阻断生成。
+   */
+  appendSessionEvent?: (data: {
+    eventType: string
+    payload?: Record<string, unknown>
+    actor?: string
+  }) => Promise<unknown>
 }
 
 export type DeckGenerationResult = {

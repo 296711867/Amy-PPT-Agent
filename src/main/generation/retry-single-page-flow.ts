@@ -244,6 +244,8 @@ export async function executeRetrySinglePageGeneration(
   })
   const generationResult = await generatePagesWithRetry({
     runArgs: {
+      appendSessionEvent: (data) =>
+        db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
       sessionId: context.sessionId,
       provider: context.provider,
       apiKey: context.apiKey,

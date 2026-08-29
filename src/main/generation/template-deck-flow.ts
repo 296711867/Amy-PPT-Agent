@@ -518,6 +518,8 @@ export async function executeTemplateDeckGeneration(
   }
 
   const { summary: agentSummary, failedPages } = await runDeepAgentDeckGeneration({
+      appendSessionEvent: (data) =>
+        db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
     sessionId: context.sessionId,
     provider: context.provider,
     apiKey: context.apiKey,

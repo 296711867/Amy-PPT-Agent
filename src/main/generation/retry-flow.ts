@@ -563,6 +563,8 @@ export async function executeRetryFailedPages(
     pendingPages,
     pause
   } = await runDeepAgentDeckGeneration({
+      appendSessionEvent: (data) =>
+        db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
     renderingLabel: uiText(
       context.appLocale,
       `正在重新生成 ${retryPages.length} 个失败页面`,
