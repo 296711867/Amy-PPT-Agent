@@ -40,6 +40,8 @@
 
 ## Verification Snapshot (2026-08-29)
 
+- Dependency audit closed: all 61 runtime and 27 dev dependencies verified in use (ESM/dynamic/require/postcss-plugin/tsconfig reference forms); zero removal candidates, lockfile root importer fully consistent with package.json. Radix packages are direct deps with live wrappers; react-slot et al. remain only as normal Radix-internal transitives.
+
 - The Agent cost, telemetry, pnpm, dependency-cleanup, composer-extraction, and cache-verification work above is committed and pushed to `origin/main`.
 - Full Vitest run: 345 test files / 1830 tests passed (10 environment-skipped); both TypeScript checks green.
 - Lint and build were not run, per repository instructions.
