@@ -7,7 +7,18 @@ const readSource = (relativePath: string): string =>
 
 describe('source-grounded prompt rules', () => {
   it('parse plan uses single-shot model and outline scan', () => {
-    const source = readSource('src/main/io/document-parse-handlers.ts')
+    // The parsing pipeline is split by layer under io/; the contract follows
+    // the concatenation of all document-parsing modules.
+    const source = [
+      'src/main/io/document-parse-handlers.ts',
+      'src/main/io/document-source-preparation.ts',
+      'src/main/io/document-plan-quality.ts',
+      'src/main/io/document-plan-model.ts',
+      'src/main/io/document-page-summaries.ts',
+      'src/main/io/document-image-plan.ts'
+    ]
+      .map(readSource)
+      .join('\n')
     const outlineScan = readSource('src/main/io/document-outline-scan.ts')
 
     expect(source).toContain('single-shot document parsing task')
