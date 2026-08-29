@@ -47,9 +47,12 @@ Amy-PPT 是一款 Electron 桌面端演示文稿工作台。它不是让模型�
 
 ## 本地开发
 
-环境要求：Node.js 20+、pnpm 10。
+环境要求：Node.js 20+、pnpm 10.10.0。建议通过 Corepack 使用仓库声明的准确版本：
 
 ```bash
+corepack enable
+corepack prepare pnpm@10.10.0 --activate
+node scripts/check-toolchain.mjs
 pnpm install
 pnpm dev
 ```

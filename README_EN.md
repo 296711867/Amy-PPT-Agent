@@ -35,9 +35,12 @@ For the first-run workflow, see the [quick start guide](./QUICK_START.md) (Chine
 
 ## Development
 
-Requires Node.js 20+ and pnpm 10.
+Requires Node.js 20+ and pnpm 10.10.0. Use Corepack to activate the exact repository version:
 
 ```bash
+corepack enable
+corepack prepare pnpm@10.10.0 --activate
+node scripts/check-toolchain.mjs
 pnpm install
 pnpm dev
 ```
