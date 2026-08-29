@@ -12,6 +12,8 @@
 - `src/main/db/`: persistence facade plus split layers. `schema.ts` holds Drizzle tables, `records.ts` holds row/union types, `repositories/` holds per-domain CRUD classes, `services/` holds cross-repository business logic, and `database.ts` (`PPTDatabase`) remains the single facade every caller imports. Historical migrations stay in `db/patch/`.
 - `src/main/generation/planning/`: LLM planning extracted from the runner — deck/page planners, the design-contract builder, and model JSON response parsing (`model-response.ts`). `agent-runner.ts` re-exports the planner entry points, so existing imports keep working.
 - `src/main/generation/agent-stream-processor.ts`: shared deepagent stream-loop handling (tool-event logging, custom `deck_tool_status` chunks, final assistant text).
+- `src/main/agent-runtime/prompt/`: typed prompt templates/composers plus log-safe prompt metrics. `metrics.ts` records only counts and a short fingerprint; it must never log prompt content. `composers/single-page-agent-user.ts` assembles the full single-page agent user prompt (run addenda, retry repair, template inspection, per-page data), keeping `generation/agent-runner.ts` lean and the assembly unit-testable.
+- `src/main/agent-runtime/token-estimate.ts`: shared CJK-aware fallback estimator used by prompt telemetry and model-usage persistence when providers omit usage metadata.
 
 ## Renderer Module Map
 
@@ -23,14 +25,14 @@ Source-contract tests under `tests/unit/` read these files as text; when moving 
 ## Development And Release
 
 - `tests/unit/`: Vitest regression tests grouped by functional domain.
-- `scripts/`: Maintainer scripts for deterministic brand and icon asset generation.
+- `scripts/`: Maintainer scripts for deterministic brand/icon assets plus `check-toolchain.mjs` for Node/pnpm diagnostics.
 - `build/`: Electron Builder hooks and application icons required for packaging.
 - `docs/assets/`: README-facing brand assets.
 - `docs/screenshots/`: Curated product screenshots used by project documentation.
 
 ## Root Files
 
-- `package.json` and `pnpm-lock.yaml`: package contract and reproducible dependency graph.
+- `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml`: package contract, reproducible dependency graph, pnpm overrides, supported architectures, and native build allowlist. Keep the root importer synchronized with direct dependencies.
 - `electron-builder.yml`, `electron.vite.config.ts`, and TypeScript/PostCSS/Tailwind/Vitest configs: build and development configuration.
 - `README.md`, `README_EN.md`, `QUICK_START.md`, `CHANGELOG.md`, `LICENSE`, and `NOTICE`: product documentation and legal attribution.
 - `version.json`: public update manifest for the current `1.0.4` release.
