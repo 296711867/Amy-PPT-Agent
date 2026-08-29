@@ -57,4 +57,32 @@ describe('deck system prompt template', () => {
     expect(prompt).toContain('- /docs/source.md')
     expect(prompt).toContain('update_template_page_file')
   })
+
+  it('keeps the single-page system prompt stable across pages in the same deck', () => {
+    const pageOnePrompt = buildDeckAgentSystemPrompt('test-style', {
+      ...baseContext,
+      mode: 'generate',
+      selectedPageId: 'page-1',
+      selectedPageNumber: 1,
+      pageFileMap: { 'page-1': '/tmp/project/page-1.html' },
+      outlineTitles: ['Overview'],
+      outlineItems: [{ title: 'Overview', contentOutline: 'Summarize the quarter.' }],
+      sourceDocumentPaths: ['/docs/source.md']
+    })
+    const pageTwoPrompt = buildDeckAgentSystemPrompt('test-style', {
+      ...baseContext,
+      mode: 'generate',
+      selectedPageId: 'page-2',
+      selectedPageNumber: 2,
+      pageFileMap: { 'page-2': '/tmp/project/page-2.html' },
+      outlineTitles: ['Forecast'],
+      outlineItems: [{ title: 'Forecast', contentOutline: 'Explain the next-quarter forecast.' }],
+      sourceDocumentPaths: ['/docs/source.md']
+    })
+
+    expect(pageOnePrompt).toBe(pageTwoPrompt)
+    expect(pageOnePrompt).not.toContain('page-1')
+    expect(pageOnePrompt).not.toContain('Summarize the quarter.')
+    expect(pageOnePrompt).toContain('target page identified in the user message')
+  })
 })

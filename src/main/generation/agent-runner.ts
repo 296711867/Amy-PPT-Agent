@@ -7,7 +7,8 @@ import type { GenerationAgentManager, GenerationModelControl } from './context'
 import { runWithModelTemperatureControl } from '../agent-runtime/model'
 import {
   buildEditUserPrompt,
-  buildSinglePageGenerationPrompt
+  buildSinglePageAgentUserPrompt,
+  measurePromptText
 } from '../agent-runtime/prompt'
 import type {
   AnimationPreferencesPayload,
@@ -20,10 +21,7 @@ import type {
 } from '@shared/generation'
 import { isSectionAgendaOutline } from '@shared/generation'
 import { formatLayoutMasterPrompt, resolveLayoutMasterTemplate } from '@shared/layout-master'
-import {
-  formatUniversalLayoutPrompt,
-  normalizeUniversalLayoutId
-} from '@shared/universal-layouts'
+import { formatUniversalLayoutPrompt, normalizeUniversalLayoutId } from '@shared/universal-layouts'
 import { resolveModelTimeoutMs, type ModelTimeoutProfile } from '@shared/model-timeout'
 import { progressLabel, progressText } from '@shared/progress'
 import { sleep } from '../ipc/utils'
@@ -31,16 +29,10 @@ import {
   createReferenceDocumentRetriever,
   formatReferenceDocumentSnippets
 } from './reference-document-retrieval'
-import {
-  processAgentStreamCore,
-  type DeckToolStatusChunk
-} from './agent-stream-processor'
+import { processAgentStreamCore, type DeckToolStatusChunk } from './agent-stream-processor'
 export { planNewPage } from './planning/page-planner'
 import { classifyPageMethodSignal } from './method-signals'
-import {
-  MAX_RATE_LIMIT_RETRIES,
-  resolveRateLimitBackoff
-} from './rate-limit-backoff'
+import { MAX_RATE_LIMIT_RETRIES, resolveRateLimitBackoff } from './rate-limit-backoff'
 import { createRuntimeConcurrencyGate } from './concurrency-gate'
 import {
   normalizePageConcurrencyPreference,
@@ -60,10 +52,6 @@ import {
 import { persistPageHtmlFromFragment } from '../presentation/html/page-writer-core'
 import { validateAssignedDeckBackground } from './deck-backgrounds'
 import {
-  describeTemplatePageRole,
-  isValidTemplatePageRole
-} from '../templates/template-page-roles'
-import {
   formatDeckQualityFeedback,
   inspectPresentationDeckQuality,
   type DeckQualityViolation
@@ -82,10 +70,8 @@ import {
 
 type AppLocale = 'zh' | 'en'
 
-const withModelControl = <T>(
-  modelControl: GenerationModelControl | undefined,
-  task: () => T
-): T => (modelControl ? runWithModelTemperatureControl(modelControl, task) : task())
+const withModelControl = <T>(modelControl: GenerationModelControl | undefined, task: () => T): T =>
+  modelControl ? runWithModelTemperatureControl(modelControl, task) : task()
 
 const uiText = (locale: AppLocale | undefined, zh: string, en: string): string =>
   locale === 'en' ? en : zh
@@ -531,49 +517,49 @@ export const runDeepAgentDeckGeneration = async (args: {
         styleId: args.styleId,
         systemPromptAddendum: args.systemPromptAddendum,
         context: {
-        sessionId: args.sessionId,
-        projectDir: args.projectDir,
-        indexPath: args.indexPath,
-        topic: args.topic,
-        deckTitle: args.deckTitle,
-        styleId: args.styleId,
-        styleSkillPrompt: args.styleSkillPrompt,
-        layoutRulesPrompt: args.layoutRulesPrompt,
-        styleKey: args.styleKey,
-        styleName: args.styleName,
-        styleVersion: args.styleVersion,
-        slideSize: args.slideSize,
-        appLocale: args.appLocale,
-        animationPreferences: args.animationPreferences,
-        designContract: args.designContract,
-        templatePageReadRequired: args.requireTemplatePageRead,
-        userMessage: args.userMessage,
-        outlineTitles: [page.title],
-        outlineItems: [
-          {
-            title: page.title,
-            contentOutline: page.outline,
-            layoutIntent: page.layoutIntent,
-            contentStructure: page.contentStructure,
-            moduleCount: page.moduleCount,
-            visualAspect: page.visualAspect,
-            contentDensity: page.contentDensity,
-            visualFormat: page.visualFormat,
-            audienceMove: page.audienceMove,
-            layoutId: page.layoutId,
-            layoutPrompt: page.layoutPrompt,
-            imageAssetPath: page.imageAssetPath,
-            imageAssetPaths: page.imageAssetPaths
-          }
-        ],
-        sourceDocumentPaths: pageSourceDocumentPaths,
-        mode: args.generationMode ?? 'generate',
-        pageFileMap: { [page.pageId]: currentPagePath },
-        pageNumbers: { [page.pageId]: page.pageNumber },
-        selectedPageId: page.pageId,
-        selectedPageNumber: page.pageNumber,
-        existingPageIds: [page.pageId],
-        allowedPageIds: [page.pageId]
+          sessionId: args.sessionId,
+          projectDir: args.projectDir,
+          indexPath: args.indexPath,
+          topic: args.topic,
+          deckTitle: args.deckTitle,
+          styleId: args.styleId,
+          styleSkillPrompt: args.styleSkillPrompt,
+          layoutRulesPrompt: args.layoutRulesPrompt,
+          styleKey: args.styleKey,
+          styleName: args.styleName,
+          styleVersion: args.styleVersion,
+          slideSize: args.slideSize,
+          appLocale: args.appLocale,
+          animationPreferences: args.animationPreferences,
+          designContract: args.designContract,
+          templatePageReadRequired: args.requireTemplatePageRead,
+          userMessage: args.userMessage,
+          outlineTitles: [page.title],
+          outlineItems: [
+            {
+              title: page.title,
+              contentOutline: page.outline,
+              layoutIntent: page.layoutIntent,
+              contentStructure: page.contentStructure,
+              moduleCount: page.moduleCount,
+              visualAspect: page.visualAspect,
+              contentDensity: page.contentDensity,
+              visualFormat: page.visualFormat,
+              audienceMove: page.audienceMove,
+              layoutId: page.layoutId,
+              layoutPrompt: page.layoutPrompt,
+              imageAssetPath: page.imageAssetPath,
+              imageAssetPaths: page.imageAssetPaths
+            }
+          ],
+          sourceDocumentPaths: args.sourceDocumentPaths,
+          mode: args.generationMode ?? 'generate',
+          pageFileMap: { [page.pageId]: currentPagePath },
+          pageNumbers: { [page.pageId]: page.pageNumber },
+          selectedPageId: page.pageId,
+          selectedPageNumber: page.pageNumber,
+          existingPageIds: [page.pageId],
+          allowedPageIds: [page.pageId]
         }
       })
     )
@@ -581,69 +567,33 @@ export const runDeepAgentDeckGeneration = async (args: {
 
     try {
       const combinedSignal = modelCallSignal(args.modelTimeoutMs, 'agent', args.signal)
+      const userPrompt = buildSinglePageAgentUserPrompt({
+        topic: args.topic,
+        deckTitle: args.deckTitle,
+        slideSize: args.slideSize,
+        generationMode: args.generationMode ?? 'generate',
+        singlePagePromptAddendum: args.singlePagePromptAddendum,
+        pagePromptAddendum,
+        requireTemplatePageRead: args.requireTemplatePageRead,
+        methodLevelFixes,
+        page,
+        sourceDocumentPaths: pageSourceDocumentPaths,
+        referenceDocumentSnippets,
+        retryContext
+      })
+      log.info('[deepagent] single-page prompt metrics', {
+        sessionId: args.sessionId,
+        pageId: page.pageId,
+        worker: workerLabel,
+        generationMode: args.generationMode ?? 'generate',
+        userPromptMetrics: measurePromptText(userPrompt)
+      })
       const stream = await deepAgent.stream(
         {
           messages: [
             {
               role: 'user',
-              content: [
-                args.singlePagePromptAddendum?.trim() || '',
-                pagePromptAddendum?.trim() || '',
-                retryContext
-                  ? [
-                      '',
-                      'Targeted repair instructions (this is a retry):',
-                      '1. First read the existing page HTML with read_file to see what is already written.',
-                      '2. Identify the specific violation from the previous error and fix ONLY that issue.',
-                      '3. Preserve all content, facts, and layout elements that were correct in the previous version.',
-                      '4. Do not rewrite the entire page from scratch — make surgical fixes to the failing elements.',
-                      `5. Previous error: ${retryContext.previousError}`
-                    ].join('\n')
-                  : '',
-                args.requireTemplatePageRead
-                  ? [
-                      'Template inspection is mandatory before writing.',
-                      `1. First call read_file(path="/${page.pageId}.html", offset=0, limit=1200) to inspect the copied template page.`,
-                      '2. Identify every template-skeleton asset and wrapper: background images, texture images, decorative images, masks, overlays, CSS background-image/url(...) references, <img src>, SVG image href, font scale, spacing rhythm, color language, and reusable structural wrappers from that file.',
-                      '3. These background/decorative assets are not old business content. Do not delete them when replacing text, metrics, logos, or content images.',
-                      '4. update_template_page_file rebuilds the page from your content fragment and rejects writes that drop template skeleton resources, so the fragment you write must explicitly include the required background/decorative layers or exact local asset references from the template page.',
-                      '5. Only after reading the file, call update_template_page_file with the new content while preserving the template visual system unless the user explicitly asks for a redesign.',
-                      '6. Do not call update_single_page_file in this template run.'
-                    ].join('\n')
-                  : '',
-                isValidTemplatePageRole(page.templatePageRole)
-                  ? `The template base for this slide was classified as a ${describeTemplatePageRole(page.templatePageRole).en} (${describeTemplatePageRole(page.templatePageRole).zh}). Keep that structural role: preserve the composition and hierarchy of the base (e.g. a cover base stays a cover, a data base keeps chart/table prominence) while replacing the old content.`
-                  : '',
-                buildSinglePageGenerationPrompt({
-                  topic: args.topic,
-                  deckTitle: args.deckTitle,
-                  pageId: page.pageId,
-                  pageNumber: page.pageNumber,
-                  pageTitle: page.title,
-                  pageOutline: page.outline,
-                  slideSize: args.slideSize,
-                  layoutIntent: page.layoutIntent,
-                  contentStructure: page.contentStructure,
-                  moduleCount: page.moduleCount,
-                  visualAspect: page.visualAspect,
-                  contentDensity: page.contentDensity,
-                  visualFormat: page.visualFormat,
-                  audienceMove: page.audienceMove,
-                  methodLevelFixes: methodLevelFixes.slice(),
-                  layoutId: page.layoutId,
-                  layoutPrompt: page.layoutPrompt,
-                  imageAssetPath: page.imageAssetPath,
-                  imageAssetPaths: page.imageAssetPaths,
-                  backgroundAsset: page.backgroundAsset,
-                  sourceDocumentPaths: pageSourceDocumentPaths,
-                  referenceDocumentSnippets,
-                  isRetryMode: args.generationMode === 'retry',
-                  writeToolName,
-                  retryContext
-                })
-              ]
-                .filter(Boolean)
-                .join('\n\n')
+              content: userPrompt
             }
           ]
         },
@@ -879,10 +829,7 @@ export const runDeepAgentDeckGeneration = async (args: {
     if (!signal) return
     const count = (methodSignalCounts.get(signal.signalClass) || 0) + 1
     methodSignalCounts.set(signal.signalClass, count)
-    if (
-      count >= METHOD_SIGNAL_ESCALATE_THRESHOLD &&
-      !methodLevelFixes.includes(signal.fix)
-    ) {
+    if (count >= METHOD_SIGNAL_ESCALATE_THRESHOLD && !methodLevelFixes.includes(signal.fix)) {
       methodLevelFixes.push(signal.fix)
       log.warn('[deepagent] method-level signal escalated for later slides', {
         sessionId: args.sessionId,
@@ -1562,42 +1509,42 @@ const runDeepAgentScopedEdit = async (args: RunDeepAgentScopedEditArgs): Promise
       modelRuntime: args.agentManager.getSession(args.sessionId)?.modelRuntime,
       styleId: args.styleId,
       context: {
-      mode: 'edit',
-      editScope: args.editScope,
-      sessionId: args.sessionId,
-      projectDir: args.projectDir,
-      indexPath: args.indexPath,
-      topic: args.topic,
-      deckTitle: args.deckTitle,
-      styleId: args.styleId,
-      styleSkillPrompt: args.styleSkillPrompt,
-      layoutRulesPrompt: args.layoutRulesPrompt,
-      styleKey: args.styleKey,
-      styleName: args.styleName,
-      styleVersion: args.styleVersion,
-      slideSize: args.slideSize,
-      appLocale: args.appLocale,
-      designContract: args.designContract,
-      userMessage: args.userMessage,
-      outlineTitles: args.outlineTitles,
-      outlineItems,
-      sourceDocumentPaths: args.sourceDocumentPaths,
-      pageFileMap: args.pageFileMap,
-      pageNumbers: args.pageNumbers,
-      selectPageIds: args.selectPageIds,
-      selectedPageId: args.selectedPageId,
-      selectedPageNumber: args.selectedPageNumber,
-      selectedSelector: args.selectedSelector,
-      elementTag: args.elementTag,
-      elementText: args.elementText,
-      selectedElementContext: args.selectedElementContext,
-      existingPageIds: args.existingPageIds,
-      allowedPageIds:
-        args.editScope === 'page' && args.selectedPageId
-          ? [args.selectedPageId]
-          : args.editScope === 'deck'
-            ? Object.keys(args.pageFileMap)
-            : undefined
+        mode: 'edit',
+        editScope: args.editScope,
+        sessionId: args.sessionId,
+        projectDir: args.projectDir,
+        indexPath: args.indexPath,
+        topic: args.topic,
+        deckTitle: args.deckTitle,
+        styleId: args.styleId,
+        styleSkillPrompt: args.styleSkillPrompt,
+        layoutRulesPrompt: args.layoutRulesPrompt,
+        styleKey: args.styleKey,
+        styleName: args.styleName,
+        styleVersion: args.styleVersion,
+        slideSize: args.slideSize,
+        appLocale: args.appLocale,
+        designContract: args.designContract,
+        userMessage: args.userMessage,
+        outlineTitles: args.outlineTitles,
+        outlineItems,
+        sourceDocumentPaths: args.sourceDocumentPaths,
+        pageFileMap: args.pageFileMap,
+        pageNumbers: args.pageNumbers,
+        selectPageIds: args.selectPageIds,
+        selectedPageId: args.selectedPageId,
+        selectedPageNumber: args.selectedPageNumber,
+        selectedSelector: args.selectedSelector,
+        elementTag: args.elementTag,
+        elementText: args.elementText,
+        selectedElementContext: args.selectedElementContext,
+        existingPageIds: args.existingPageIds,
+        allowedPageIds:
+          args.editScope === 'page' && args.selectedPageId
+            ? [args.selectedPageId]
+            : args.editScope === 'deck'
+              ? Object.keys(args.pageFileMap)
+              : undefined
       }
     })
   )

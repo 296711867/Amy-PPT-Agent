@@ -45,7 +45,7 @@ describe('Amy-PPT brand contract', () => {
     expect(packageMetadata).toMatchObject({
       name: APP_PACKAGE_NAME,
       version: APP_VERSION,
-      homepage: 'https://github.com/296711867/Amy-PPT'
+      homepage: 'https://github.com/296711867/Amy-PPT-Agent'
     })
     expect(updateManifest).toMatchObject({
       version: '1.0.4',

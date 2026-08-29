@@ -1,6 +1,10 @@
 import type { SessionDeckGenerationContext } from '../../agent/types'
 import { formatLayoutIntentPrompt } from '@shared/layout-intent'
-import { AMY_IMAGE_PLACEHOLDER_PATH, isSectionAgendaOutline, type VisualFormat } from '@shared/generation'
+import {
+  AMY_IMAGE_PLACEHOLDER_PATH,
+  isSectionAgendaOutline,
+  type VisualFormat
+} from '@shared/generation'
 import {
   CHART_SKILL_NAME,
   DIAGRAM_SKILL_NAME,
@@ -8,7 +12,6 @@ import {
 } from '../../../product-skills/contract'
 // 共享规则段（画布约束、语言、语义结构、碰撞规则、HTML 协议、源文档策略等）
 // 已统一在 deck-system 系统提示注入，用户提示只带页面级数据。去重后每页省 ~5-7K tokens。
-import { SOURCE_UNSUPPORTED_CLAIMS } from './shared'
 import { resolveCanvasScenario } from './canvas-scenario'
 import { getUniversalLayoutImageAspect } from '@shared/universal-layouts'
 
@@ -217,7 +220,8 @@ export function buildSinglePageGenerationPrompt(args: {
     requiredImageAspect
       ? `- Image-frame geometry is fixed as ${requiredImageAspect}. Do not convert portrait rows into landscape grids or mixed feature collages. Preserve identical aspect-ratio CSS for equal image slots.`
       : '',
-    assignedImagePaths.length > 0 && assignedImagePaths.every((assetPath) => assetPath === AMY_IMAGE_PLACEHOLDER_PATH)
+    assignedImagePaths.length > 0 &&
+    assignedImagePaths.every((assetPath) => assetPath === AMY_IMAGE_PLACEHOLDER_PATH)
       ? [
           `Image slots for this slide run in placeholder mode (${assignedImagePaths.length} planned slot(s), hard requirement):`,
           '- Render every planned image slot as a semantic placeholder block instead of a real photo.',
@@ -226,22 +230,22 @@ export function buildSinglePageGenerationPrompt(args: {
           '- Placeholders are replaceable containers for later real images: keep them inside the layout image-slot geometry. Do NOT use <img>, do NOT invent file paths, and do NOT fake a photo with CSS illustration.'
         ].join('\n')
       : args.imageAssetPaths?.length
-      ? [
-          `Assigned image assets (${args.imageAssetPaths.length} distinct slots):`,
-          ...args.imageAssetPaths.map(
-            (assetPath, index) =>
-              `- Slot ${index + 1}: use <img src="${assetPath}"> with object-fit: cover.`
-          ),
-          '- Use every array entry exactly once and in slot order. AI-generated paths are distinct; the placeholder path may intentionally repeat.',
-          '- Keep each image in a replaceable frame. Do not draw CSS-only fake images or invent another image path.'
-        ].join('\n')
-      : args.imageAssetPath
         ? [
-            `Assigned image asset: ${args.imageAssetPath}`,
-            `- Use this exact path in an <img src="${args.imageAssetPath}"> inside the layout's image slot.`,
-            '- Preserve object-fit and a replaceable image container. Do not draw a CSS-only fake image and do not invent another image path.'
+            `Assigned image assets (${args.imageAssetPaths.length} distinct slots):`,
+            ...args.imageAssetPaths.map(
+              (assetPath, index) =>
+                `- Slot ${index + 1}: use <img src="${assetPath}"> with object-fit: cover.`
+            ),
+            '- Use every array entry exactly once and in slot order. AI-generated paths are distinct; the placeholder path may intentionally repeat.',
+            '- Keep each image in a replaceable frame. Do not draw CSS-only fake images or invent another image path.'
           ].join('\n')
-        : '',
+        : args.imageAssetPath
+          ? [
+              `Assigned image asset: ${args.imageAssetPath}`,
+              `- Use this exact path in an <img src="${args.imageAssetPath}"> inside the layout's image slot.`,
+              '- Preserve object-fit and a replaceable image container. Do not draw a CSS-only fake image and do not invent another image path.'
+            ].join('\n')
+          : '',
     args.backgroundAsset
       ? [
           'Assigned full-canvas PPT background (hard requirement):',
@@ -270,36 +274,10 @@ export function buildSinglePageGenerationPrompt(args: {
     // 同一 deck 内的 provider 端 prompt cache 可命中。
     ...retryInstructions,
     '',
-    'Required content enrichment decision before writing:',
-    '- First use the Canvas scenario rules (in the system prompt) to decide the page form and focal message; then use the scenario expansion rules (also in the system prompt) only to decide whether the content itself needs enrichment or optimization.',
-    '- If the content points are only a title, one short sentence, or 1-2 seed phrases, the page is thin: enrich the warranted structure before writing the final content.',
-    '- If the content points already contain enough facts, the page is not thin: group and compress instead of adding more visible modules.',
-    '- This content decision happens before animation and final HTML; animation is downstream only and must follow the current canvas scenario, source grounding, and warranted content enrichment.',
-    '',
-    'Expansion selection guardrails:',
-    '- Treat content points as short seed phrases, not as a checklist that must become one visible card/row per point. Decide which points are primary, grouped support, compact annotations, or lower-priority detail based on the slide title, source range, and available space.',
-    '- When source documents are present, expansion must be source-grounded: if inspected material is thin, enrich the slide from inspected material; if it is dense, summarize and group.',
-    `- Do not add generic industry framing, unsupported ${SOURCE_UNSUPPORTED_CLAIMS}, or polished-sounding conclusions that are absent from the source document.`,
-    '- Do not duplicate the same source facts in multiple large modules. If a fact appears in a timeline/table/chart, do not repeat it again as a separate summary card unless it is the single hero message of the slide.',
-    '- When there are many same-level points, preserve the main meaning by grouping related points and surfacing only the amount that fits a real slide with breathing room.',
-    '- When the user provided an explicit list of same-level topics, keep them distinct only where the layout allows; otherwise group under shared headings instead of creating equal-weight modules for every item.',
-    '- Prefer visualization-friendly expression. When points involve trends, comparisons, or proportions, use charts or data cards when appropriate.',
-    '',
-    'Single-slide tool constraints:',
+    'Required page write:',
     `- Required action: call ${writeToolName}(pageId="${args.pageId}", content=complete creative page fragment).`,
-    `- This is not optional. A final text response without a successful ${writeToolName} tool call means the slide is not generated.`,
-    '- Do not call update_page_file. In this single-slide run it is intentionally not available.',
     writeToolName === 'update_template_page_file'
       ? '- Do not call update_single_page_file. This template run exposes update_template_page_file instead.'
-      : '',
-    '- content must be a complete creative page fragment. The tool will wrap it with section[data-page-scaffold], main[data-role="content"], editable data-block-id attributes, and the runtime page frame when needed.',
-    '- The content must not contain <!doctype>, <html>, <head>, <body>, .ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, or data-ppt-guard-root.',
-    '- The content must be complete and balanced: close your main layout containers and leave no unfinished trailing tags.',
-    '- After the tool call succeeds, final response should be a short summary only. Do not paste the HTML in the final response.',
-    '- Do not modify other pages.',
-    '',
-    'Tool context (pre-injected):',
-    `- Target file: ${args.pageId}.html (virtual path: /${args.pageId}.html)`,
-    '- Agent workspace root: /'
+      : ''
   ].join('\n')
 }

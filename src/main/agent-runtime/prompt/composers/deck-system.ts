@@ -1,5 +1,4 @@
 import type { SessionDeckGenerationContext } from '../../agent/types'
-import { isSectionAgendaOutline } from '@shared/generation'
 import {
   buildLayoutCollisionRules,
   buildPageSemanticStructure,
@@ -91,10 +90,6 @@ export function buildDeckAgentSystemPrompt(
       (Array.isArray(context.selectPageIds) && context.selectPageIds.length === 1) ||
       (Array.isArray(context.allowedPageIds) && context.allowedPageIds.length === 1) ||
       context.outlineTitles.length === 1)
-  const isSectionAgendaSinglePageTask =
-    isSinglePageTask &&
-    context.outlineItems.length === 1 &&
-    isSectionAgendaOutline(context.outlineItems[0]?.contentOutline || '')
   const isTemplateGeneration = context.templatePageReadRequired === true
   const singlePageWriteToolName = isTemplateGeneration
     ? 'update_template_page_file'
@@ -104,9 +99,7 @@ export function buildDeckAgentSystemPrompt(
       ? '3. Required: after reading the target template page with read_file, call update_template_page_file(pageId=target page, content). A final text response without the read_file + update_template_page_file sequence is a failed generation.'
       : '3. Required: call update_single_page_file(pageId=target page, content). A final text response without this tool call is a failed generation.'
     : '3. Call update_page_file(content) page by page. For multi-page generation, write each target page file in order. You may pass pageId to override automatic targeting.'
-  const sourceDocumentPaths = isSectionAgendaSinglePageTask
-    ? []
-    : (context.sourceDocumentPaths || []).filter(Boolean)
+  const sourceDocumentPaths = (context.sourceDocumentPaths || []).filter(Boolean)
   const isRetryMode = context.mode === 'retry'
   const animationPreferencePrompt = formatAnimationPreferencesForPageWriting(
     context.animationPreferences
@@ -160,20 +153,16 @@ export function buildDeckAgentSystemPrompt(
   const executionFlow = isSinglePageTask
       ? context.templatePageReadRequired
         ? [
-            `1. Mandatory first action: call read_file(path="${targetPagePath || '/<pageId>.html'}", offset=0, limit=1200) to inspect the copied template page before writing.`,
+            '1. Mandatory first action: call read_file(path="/<pageId>.html", offset=0, limit=1200) using the target pageId from the user message to inspect the copied template page before writing.',
             '2. Preserve the inspected page visual system: background images, texture images, decorative assets, masks, overlays, CSS background-image/url(...) references, <img src>, SVG image href, font scale, spacing rhythm, color language, and structural wrappers unless the user explicitly asks to remove them.',
             '   Background/decorative assets are template skeleton, not stale business content; replacing facts and text must not remove the visual shell.',
             `   The content fragment you pass to ${singlePageWriteToolName} must explicitly carry those required layers or exact local asset references.`,
-            sourceDocumentPaths.length > 0
-              ? `3. Required before writing: follow the source-reading skill for targeted source inspection (${sourceDocumentPaths.join(', ')}).`
-              : '3. Analyze the new slide content requirements from the context provided.',
+            '3. Follow the page-specific source instructions in the user message. If that message marks the page as a section agenda, do not inspect source documents.',
             step3Instruction,
             '4. Send a short summary as your final response.'
           ].join('\n')
         : [
-            sourceDocumentPaths.length > 0
-              ? `1. Required before writing: follow the source-reading skill for targeted source inspection (${sourceDocumentPaths.join(', ')}).`
-              : '1. Analyze the slide requirements from the context provided.',
+            '1. Analyze the slide requirements and follow the page-specific source instructions in the user message. If that message marks the page as a section agenda, do not inspect source documents.',
             step3Instruction,
             '3. Send a short summary as your final response.'
           ].join('\n')
@@ -219,9 +208,17 @@ export function buildDeckAgentSystemPrompt(
       topic: context.topic,
       deckTitle: context.deckTitle,
       slideCount: context.outlineTitles.length,
-      targetInfo,
-      targetFileLine: targetPagePath ? `Target file: ${targetPagePath}` : '',
-      pageList,
+      targetInfo: isSinglePageTask
+        ? 'This run may modify only the target page identified in the user message.'
+        : targetInfo,
+      targetFileLine: isSinglePageTask
+        ? 'Target file: use /<pageId>.html from the user message.'
+        : targetPagePath
+          ? `Target file: ${targetPagePath}`
+          : '',
+      pageList: isSinglePageTask
+        ? 'The page title, content points, layout intent, assets, and target pageId are provided in the user message.'
+        : pageList,
       presetLabel,
       presetId,
       stylePrompt,

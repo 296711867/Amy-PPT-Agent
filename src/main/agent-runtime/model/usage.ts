@@ -2,6 +2,7 @@ import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import type { BaseMessage } from '@langchain/core/messages'
 import type { LLMResult } from '@langchain/core/outputs'
 import log from 'electron-log/main.js'
+import { estimateTextTokens } from '../token-estimate'
 
 export interface ExtractedModelUsage {
   inputTokens: number
@@ -67,11 +68,6 @@ const readUsageRecord = (value: unknown): ExtractedModelUsage | null => {
     totalTokens: totalTokens ?? input + output,
     source: 'provider'
   }
-}
-
-const countEstimatedTokens = (value: string): number => {
-  if (!value) return 0
-  return Math.max(1, Math.ceil(value.length / 4))
 }
 
 const serializeMessages = (messages: BaseMessage[][]): string =>
@@ -142,11 +138,11 @@ export class ModelUsageCallbackHandler extends BaseCallbackHandler {
   }
 
   handleLLMStart(_llm: unknown, prompts: string[], runId: string): void {
-    this.estimatedInputByRun.set(runId, countEstimatedTokens(prompts.join('\n')))
+    this.estimatedInputByRun.set(runId, estimateTextTokens(prompts.join('\n')))
   }
 
   handleChatModelStart(_llm: unknown, messages: BaseMessage[][], runId: string): void {
-    this.estimatedInputByRun.set(runId, countEstimatedTokens(serializeMessages(messages)))
+    this.estimatedInputByRun.set(runId, estimateTextTokens(serializeMessages(messages)))
   }
 
   handleLLMError(_error: unknown, runId: string): void {
@@ -164,7 +160,7 @@ export class ModelUsageCallbackHandler extends BaseCallbackHandler {
         ? providerUsage
         : (() => {
             const inputTokens = this.estimatedInputByRun.get(runId) ?? 0
-            const outputTokens = countEstimatedTokens(
+            const outputTokens = estimateTextTokens(
               output.generations
                 .flat()
                 .map((generation) => generation.text)

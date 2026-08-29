@@ -8,6 +8,7 @@ import {
 } from 'deepagents'
 import { createProductSkillsMiddlewareSet } from '../skills/backend'
 import type { RequiredProductSkillName } from '../../product-skills'
+import type { SessionDeckGenerationContext } from './types'
 
 export class GuardedFilesystemBackend extends FilesystemBackend {
   constructor(
@@ -73,13 +74,30 @@ export class GuardedFilesystemBackend extends FilesystemBackend {
   }
 }
 
+export function shouldEnableGeneralPurposeSubagent(
+  context: Pick<
+    SessionDeckGenerationContext,
+    'mode' | 'selectedPageId' | 'selectPageIds' | 'allowedPageIds' | 'outlineTitles'
+  >
+): boolean {
+  if (context.mode === 'edit') return true
+  return !(
+    Boolean(context.selectedPageId) ||
+    context.selectPageIds?.length === 1 ||
+    context.allowedPageIds?.length === 1 ||
+    context.outlineTitles.length === 1
+  )
+}
+
 export function createProductGeneralPurposeSubagent(args: {
   model: BaseLanguageModel
   tools: unknown[]
   backend: FilesystemBackend | CompositeBackend
   skillSource: string
   requiredSkillNames: readonly RequiredProductSkillName[]
+  enabled?: boolean
 }): any[] {
+  if (args.enabled === false) return []
   if (!(args.backend instanceof CompositeBackend)) return []
   return [
     {

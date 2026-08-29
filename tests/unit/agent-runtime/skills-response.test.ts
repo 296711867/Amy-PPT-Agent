@@ -13,7 +13,10 @@ import {
   createProductSkillsMiddlewareSet,
   createSkillsMiddleware
 } from '../../../src/main/agent-runtime/skills/backend'
-import { createProductGeneralPurposeSubagent } from '../../../src/main/agent-runtime/agent/backend'
+import {
+  createProductGeneralPurposeSubagent,
+  shouldEnableGeneralPurposeSubagent
+} from '../../../src/main/agent-runtime/agent/backend'
 
 type ModelCall = NonNullable<ReturnType<typeof createSkillsMiddleware>['wrapModelCall']>
 
@@ -104,6 +107,44 @@ describe('agent runtime skills model response compatibility', () => {
     expect(subagent.middleware).toHaveLength(2)
     expect(subagent.middleware[1].wrapModelCall).toBeTypeOf('function')
     expect(deepAgentsSkillsMiddleware).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits the general-purpose subagent when the caller disables delegation', () => {
+    const backend = new CompositeBackend({} as never, {})
+    const subagents = createProductGeneralPurposeSubagent({
+      model: {} as never,
+      tools: [],
+      backend,
+      skillSource: '/skills/',
+      requiredSkillNames: [],
+      enabled: false
+    })
+
+    expect(subagents).toEqual([])
+    expect(deepAgentsSkillsMiddleware).not.toHaveBeenCalled()
+  })
+
+  it('disables delegation for single-page generation but preserves multi-page and edit flows', () => {
+    expect(
+      shouldEnableGeneralPurposeSubagent({
+        mode: 'generate',
+        selectedPageId: 'page-1',
+        outlineTitles: ['Intro']
+      })
+    ).toBe(false)
+    expect(
+      shouldEnableGeneralPurposeSubagent({
+        mode: 'generate',
+        outlineTitles: ['Intro', 'Details']
+      })
+    ).toBe(true)
+    expect(
+      shouldEnableGeneralPurposeSubagent({
+        mode: 'edit',
+        selectedPageId: 'page-1',
+        outlineTitles: ['Intro']
+      })
+    ).toBe(true)
   })
 
   it('uses the same normalized skills middleware for the main product agent set', () => {

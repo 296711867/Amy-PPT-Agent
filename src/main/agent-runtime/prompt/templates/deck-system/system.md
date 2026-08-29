@@ -49,6 +49,8 @@ Page outline:
 {{pageList}}
 
 Fill each page around its main thesis: treat the content points in the outline as evidence to select, group, and merge around the one sentence the page should deliver — not as a checklist where every point becomes a visible module. Keep each page title aligned with its thesis.
+Do not duplicate the same source facts in multiple large modules. If a fact already appears in a timeline, table, or chart, do not repeat it as a separate summary card unless it is the single hero message of the slide.
+When the outline is an explicit list of same-level topics, keep them distinct only where the layout allows; otherwise group related points under shared headings instead of creating equal-weight modules for every item. When points involve trends, comparisons, or proportions, prefer charts or data cards over repeated text modules.
 
 ## 最终风格校准（写入前）
 风格预设：{{presetLabel}} ({{presetId}})

@@ -351,6 +351,9 @@ describe('source-grounded prompt rules', () => {
   it('single-slide planning can preserve explicit topic lists', () => {
     const engineGenerate = readSource('src/main/generation/planning/page-planner.ts')
     const generationUser = readSource('src/main/agent-runtime/prompt/composers/generation-user.ts')
+    const deckSystemTemplate = readSource(
+      'src/main/agent-runtime/prompt/templates/deck-system/system.md'
+    )
     const planningComposer = readSource('src/main/agent-runtime/prompt/composers/planning.ts')
     const planningTemplate = readSource(
       'src/main/agent-runtime/prompt/templates/planning/system.md'
@@ -360,10 +363,14 @@ describe('source-grounded prompt rules', () => {
     expect(engineGenerate).toContain('keyPoints must contain 1-10 short phrases')
     expect(engineGenerate).toContain('preserve each listed topic as a separate key point')
     expect(generationUser).not.toContain('final slide should cover all of them')
-    expect(generationUser).toContain('not as a checklist')
-    expect(generationUser).toContain('Do not duplicate the same source facts')
-    expect(generationUser).toContain('grouping related points')
-    expect(generationUser).toContain('keep them distinct only where the layout allows')
+    // Expansion-selection guardrails are deck-stable rules: they live in the
+    // system prompt (shared across pages for provider cache hits), not the
+    // per-page user prompt.
+    expect(generationUser).not.toContain('not as a checklist')
+    expect(deckSystemTemplate).toContain('not as a checklist')
+    expect(deckSystemTemplate).toContain('Do not duplicate the same source facts')
+    expect(deckSystemTemplate).toContain('group related points')
+    expect(deckSystemTemplate).toContain('keep them distinct only where the layout allows')
     expect(planningComposer).toContain('planningPromptCatalog.render')
     expect(planningTemplate).toContain('Provide 1-10 key points per slide')
     expect(runtimeUserSource).toContain('keyPoints must contain 1-10 strings')
@@ -421,7 +428,10 @@ describe('source-grounded prompt rules', () => {
     expect(sourceReadingSkill).toContain('retrieved snippet conflicts with the source passage')
     expect(sourceReadingSkill).toContain('Slide title: "Q3 Revenue Highlights"')
     expect(sourceReadingSkill).toContain('Prefer 50-80 lines around grep matches')
-    expect(source).toContain('expansion must be source-grounded')
+    // Source-grounded expansion moved out of the per-page user prompt; the
+    // deduped rule text lives in the shared system-prompt expansion rules.
+    expect(source).not.toContain('expansion must be source-grounded')
+    expect(sharedSource).toContain('expansion must be source-grounded')
     // Source rules live in the system prompt; the user prompt references them
     // by name rather than re-including the full text (dedup).
     expect(source).toContain('Follow the source-document strategy, fact rules')

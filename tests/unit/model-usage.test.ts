@@ -34,11 +34,14 @@ describe('model usage tracking', () => {
 
   it('uses heuristic estimates when the provider omits usage', async () => {
     const recordModelUsage = vi.fn(async () => undefined)
-    const handler = new ModelUsageCallbackHandler({
-      provider: 'openai',
-      model: 'compatible-model',
-      sessionId: 'session-usage-1'
-    }, { record: recordModelUsage })
+    const handler = new ModelUsageCallbackHandler(
+      {
+        provider: 'openai',
+        model: 'compatible-model',
+        sessionId: 'session-usage-1'
+      },
+      { record: recordModelUsage }
+    )
 
     handler.handleLLMStart({} as never, ['Create a concise presentation outline.'], 'run-1')
     await handler.handleLLMEnd(
@@ -63,6 +66,34 @@ describe('model usage tracking', () => {
     expect(recorded.inputTokens).toBeGreaterThan(0)
     expect(recorded.outputTokens).toBeGreaterThan(0)
     expect(recorded.totalTokens).toBe(recorded.inputTokens + recorded.outputTokens)
+  })
+
+  it('does not underestimate non-ASCII fallback usage with the ASCII divisor', async () => {
+    const recordModelUsage = vi.fn(async () => undefined)
+    const handler = new ModelUsageCallbackHandler(
+      {
+        provider: 'openai',
+        model: 'compatible-model'
+      },
+      { record: recordModelUsage }
+    )
+
+    handler.handleLLMStart({} as never, ['中文测试'], 'run-zh')
+    await handler.handleLLMEnd(
+      {
+        generations: [[{ text: '完成' }]]
+      },
+      'run-zh'
+    )
+
+    expect(recordModelUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'estimated',
+        inputTokens: 4,
+        outputTokens: 2,
+        totalTokens: 6
+      })
+    )
   })
 
   it('scopes a shared recorder to one session without mutating the shared runtime', () => {

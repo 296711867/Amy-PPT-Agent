@@ -2,12 +2,17 @@ import log from 'electron-log/main.js'
 import { createDeepAgent } from 'deepagents'
 import { buildDeckAgentSystemPrompt } from '../prompt/composers/deck-system'
 import { buildEditAgentSystemPrompt } from '../prompt/composers/edit-system'
+import { measurePromptText } from '../prompt/metrics'
 import { createSessionBoundDeckTools } from '../tools/deck-tools'
 import { getRequiredProductSkillNamesForSlideSize } from '../../product-skills'
 import { resolveModel } from '../model/resolve'
 import type { ModelRuntimeConfig } from '../model/usage'
 import { attachProductSkillsBackend } from '../skills/backend'
-import { createProductGeneralPurposeSubagent, GuardedFilesystemBackend } from './backend'
+import {
+  createProductGeneralPurposeSubagent,
+  GuardedFilesystemBackend,
+  shouldEnableGeneralPurposeSubagent
+} from './backend'
 import { validatePersistedPageAfterEdit } from '../../presentation/html/page-writer-core'
 import { validateRenderedPresentationPage } from '../../presentation/html/rendered-page-validator'
 import {
@@ -223,12 +228,14 @@ export function createSessionDeckAgent(args: CreateSessionDeckAgentArgs): DeepAg
     return ''
   }
   const tools = createSessionBoundDeckTools(context)
+  const enableGeneralPurposeSubagent = shouldEnableGeneralPurposeSubagent(context)
   const systemPrompt = [
     buildDeckAgentSystemPrompt(args.styleId, context),
     args.systemPromptAddendum?.trim() || ''
   ]
     .filter(Boolean)
     .join('\n\n')
+  const systemPromptMetrics = measurePromptText(systemPrompt)
 
   log.info('[deepagent] create session deck agent', {
     sessionId: context.sessionId,
@@ -239,6 +246,8 @@ export function createSessionDeckAgent(args: CreateSessionDeckAgentArgs): DeepAg
     indexPath: context.indexPath,
     selectedPageId: context.selectedPageId,
     skillsEnabled: agentBackend.enabled,
+    generalPurposeSubagentEnabled: enableGeneralPurposeSubagent,
+    systemPromptMetrics,
     requiredSkillNames,
     selectedPagePath:
       context.selectedPageId && context.pageFileMap[context.selectedPageId]
@@ -259,7 +268,8 @@ export function createSessionDeckAgent(args: CreateSessionDeckAgentArgs): DeepAg
       tools,
       backend: agentBackend.backend,
       skillSource: agentBackend.skillSource,
-      requiredSkillNames
+      requiredSkillNames,
+      enabled: enableGeneralPurposeSubagent
     })
   })
 }

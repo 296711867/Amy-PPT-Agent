@@ -59,7 +59,10 @@ describe('content expansion rules — always-on, not source-gated', () => {
 
     expect(pagePrompt).toContain('Selected layout master: Chart with takeaway')
     expect(pagePrompt).toContain('flexible information architecture')
-    expect(deckPrompt).toContain('Selected layout master: Chart with takeaway')
+    expect(deckPrompt).not.toContain('Selected layout master: Chart with takeaway')
+    expect(deckPrompt).toContain(
+      'layout intent, assets, and target pageId are provided in the user message'
+    )
   })
 
   it('passes the planned module count and image geometry into page generation', () => {
@@ -155,16 +158,16 @@ describe('content expansion rules — always-on, not source-gated', () => {
     )
   })
 
-  it('single-page generation references system-prompt rules without duplicating them', () => {
+  it('keeps enrichment and HTML protocol rules only in the system prompt', () => {
     const generationUser = readSource('src/main/agent-runtime/prompt/composers/generation-user.ts')
     const singlePageSource = generationUser.slice(
       generationUser.indexOf('export function buildSinglePageGenerationPrompt')
     )
 
-    // The enrichment decision remains in the user prompt (it references system
-    // prompt rules by name), but the verbatim rule builder call is gone.
-    expect(singlePageSource).toContain('Required content enrichment decision before writing')
-    expect(singlePageSource).toContain('from the system prompt')
+    expect(singlePageSource).not.toContain('Required content enrichment decision before writing')
+    expect(singlePageSource).not.toContain('Expansion selection guardrails')
+    expect(singlePageSource).not.toContain('Single-slide tool constraints')
+    expect(singlePageSource).not.toContain('Tool context (pre-injected)')
     expect(singlePageSource).not.toContain('buildCanvasScenarioExpansionRules(args.slideSize)')
   })
 
@@ -183,12 +186,10 @@ describe('content expansion rules — always-on, not source-gated', () => {
       slideSize: baseContext.slideSize
     })
 
-    expect(pagePrompt).toContain('Required content enrichment decision before writing')
-    expect(pagePrompt).toContain('Canvas scenario rules (in the system prompt)')
-    expect(pagePrompt).toContain('scenario expansion rules (also in the system prompt)')
-    expect(pagePrompt).toContain('the page is thin: enrich the warranted structure')
-    expect(pagePrompt).toContain('animation is downstream only')
-    expect(pagePrompt).toContain('warranted content enrichment')
+    expect(pagePrompt).not.toContain('Required content enrichment decision before writing')
+    expect(pagePrompt).not.toContain('Expansion selection guardrails')
+    expect(pagePrompt).toContain('Required page write')
+    expect(pagePrompt).toContain('update_single_page_file(pageId="page-1"')
 
     expect(deckPrompt).toContain('Animation preferences for page writing only')
     expect(deckPrompt).toContain('Animation is downstream only')
@@ -223,7 +224,7 @@ describe('content expansion rules — always-on, not source-gated', () => {
     expect(pagePrompt).not.toContain('should not appear')
   })
 
-  it('section agenda single-page system prompts ignore source document paths', () => {
+  it('keeps source policy stable in the system prompt while the page prompt skips agenda reading', () => {
     const deckPrompt = buildDeckAgentSystemPrompt('test-style', {
       ...baseContext,
       sourceDocumentPaths: ['/docs/source.md'],
@@ -242,9 +243,11 @@ describe('content expansion rules — always-on, not source-gated', () => {
       ]
     })
 
-    expect(deckPrompt).not.toContain('## Source documents')
-    expect(deckPrompt).not.toContain('source-reading skill')
-    expect(deckPrompt).not.toContain('/docs/source.md')
+    expect(deckPrompt).toContain('## Source documents')
+    expect(deckPrompt).toContain('/docs/source.md')
+    expect(deckPrompt).toContain(
+      'If that message marks the page as a section agenda, do not inspect source documents.'
+    )
   })
 
   it('scenario content rules own the form guidance while scenario expansion owns enrichment', () => {
