@@ -25,7 +25,7 @@ Source-contract tests under `tests/unit/` read these files as text; when moving 
 ## Development And Release
 
 - `tests/unit/`: Vitest regression tests grouped by functional domain.
-- `scripts/`: Maintainer scripts for deterministic brand/icon assets plus `check-toolchain.mjs` for Node/pnpm diagnostics.
+- `scripts/`: Maintainer scripts for deterministic brand/icon assets, `check-toolchain.mjs` for Node/pnpm diagnostics, and `check-prompt-cache.mjs` for verifying per-deck system-prompt fingerprint stability from real generation logs.
 - `build/`: Electron Builder hooks and application icons required for packaging.
 - `docs/assets/`: README-facing brand assets.
 - `docs/screenshots/`: Curated product screenshots used by project documentation.

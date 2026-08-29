@@ -92,6 +92,7 @@
 27. **pnpm/Corepack 工作流修复**（Unreleased）：固定 pnpm 10.10.0，pnpm 配置迁到 `pnpm-workspace.yaml`，`.npmrc` Electron 镜像改为合法 npmrc 语法，嵌套脚本统一使用 `pnpm run`。新增 `node scripts/check-toolchain.mjs` / `pnpm doctor`；README 中英文版已写 Corepack 初始化方式。
 28. **依赖瘦身**（Unreleased）：移除源码零引用的 `electron-updater`、`@electron-toolkit/preload`、`@radix-ui/react-progress`、`@radix-ui/react-slot`、`@radix-ui/react-toast`、`@tanstack/react-virtual`、`class-variance-authority`。package 与 lockfile 根 importer 已校验一致；共享传递依赖没有激进删除。
 29. **收尾修复与 composer 下沉**（Unreleased）：修复上一轮遗留的 3 个失败测试（`brand.test.ts` 仓库 URL 过期、`source-grounding.test.ts` 两条断言仍指向 user prompt 旧位置）；单页 user prompt 组装从 `agent-runner.ts` 下沉为 `agent-runtime/prompt/composers/single-page-agent-user.ts`（运行级附加说明 + 重试修复 + 模板强制读取 + 模板页角色 + 页面数据 prompt），新增 `single-page-agent-user.test.ts` 定向测试，prompt 组装自此可直接单测。全量 340 测试文件（1807 用例）+ Node/Web typecheck 双绿。
+30. **Prompt cache 验证工具**（Unreleased）：`tests/unit/prompt/deck-prompt-cost.test.ts` 用真实 composer 跑一个 10 页逼真 deck 的确定性基准——断言同 deck（含模板模式）system prompt 跨页字节一致、逐页变量零泄漏、不同 style 内容指纹可区分，并量化去重收益（基准数据：system 6782 tokens/deck 一份、user 每 deck 2831 vs 旧版 10741 tokens、user 节省 73.6%、system 可缓存 61038 tokens）。`scripts/check-prompt-cache.mjs` 解析 electron-log 真实日志（单行 JSON 与多行 inspect 两种格式），按会话核对 system 指纹唯一性并汇总 user token，指纹分裂即退出码 1；配套 `tests/unit/config/prompt-cache-report.test.ts`。真实 deck 生成后运行 `node scripts/check-prompt-cache.mjs`（默认读 electron-log 位置，可传日志路径）。全量 342 测试文件（1815 用例）双绿。
 
 ### 3.1 2026-08-29 第 22–29 项已提交推送
 
@@ -166,6 +167,6 @@ pnpm install
 - git remote URL 已更新为新仓库名 `Amy-PPT-Agent.git`（旧 URL 靠 GitHub 重定向也能用）
 - `dist/` 里还有 v1.0.3 旧产物，可清理
 - **若未来要做应用内自动更新**：需在主进程接入 `electron-updater`，且每次 release 同时上传 `latest.yml` + `.blockmap`
-- **下一步优先级 1**：基于真实生成日志比较 system/user `estimatedTokens` 与 fingerprint，确认同一 deck system 指纹一致并量化节省比例。
+- **下一步优先级 1**：真实 deck 生成一次后运行 `node scripts/check-prompt-cache.mjs`，把线上日志的指纹一致性与 token 汇总和 `deck-prompt-cost.test.ts` 的离线基准（user 节省 73.6%）对账，确认 provider 侧确实吃到 prompt cache。
 - **下一步优先级 2**：继续依赖审计时只生成候选并逐个确认；注意动态加载、Electron 打包钩子和 Radix 传递依赖，禁止仅凭字符串扫描批量删除。
 - **下一步优先级 3**：继续拆分 `agent-runner.ts`、`pptx-import/index.ts`、`PreviewIframe.tsx` 等超大文件；行为改动必须配定向测试。
