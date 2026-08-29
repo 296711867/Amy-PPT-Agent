@@ -21,6 +21,7 @@
 - Unreleased toolchain cleanup: pnpm 10.10.0/Corepack contract, valid Electron mirror npmrc settings, workspace-level pnpm configuration, toolchain doctor, corrected repository metadata, and seven unused direct dependencies removed.
 - Unreleased maintainability: single-page user-prompt assembly extracted into `agent-runtime/prompt/composers/single-page-agent-user.ts` with focused unit tests, slimming `generation/agent-runner.ts`.
 - Unreleased cache verification: a deterministic 10-page prompt-cost benchmark (`tests/unit/prompt/deck-prompt-cost.test.ts`) proves per-deck system-prompt byte stability and quantifies the dedup pass (~74% estimated user-prompt tokens saved on the fixture deck), and `scripts/check-prompt-cache.mjs` verifies the same fingerprint invariant against real electron-log output after a live generation.
+- Unreleased pptx-import split: the 2168-line importer entry is now six one-way layered modules (element model, HTML/CSS sanitize, image registry, style CSS, block builders, slide render) plus a thin orchestration entry, with split regression tests and an updated io boundary inventory.
 - Resilience: 503/502 mapped into the shared rate-limit backoff class, plus the layout-library write-recursion hotfix.
 - Full project context, architecture map, and release SOP are documented in [HANDOFF.md](./HANDOFF.md).
 
@@ -34,7 +35,7 @@
 ## Verification Snapshot (2026-08-29)
 
 - The Agent cost, telemetry, pnpm, dependency-cleanup, composer-extraction, and cache-verification work above is committed and pushed to `origin/main`.
-- Full Vitest run: 342 test files / 1815 tests passed (10 environment-skipped); both TypeScript checks green.
+- Full Vitest run: 344 test files / 1821 tests passed (10 environment-skipped); both TypeScript checks green.
 - Lint and build were not run, per repository instructions.
 - See [HANDOFF.md](./HANDOFF.md) for exact files, constraints, and next steps.
 
