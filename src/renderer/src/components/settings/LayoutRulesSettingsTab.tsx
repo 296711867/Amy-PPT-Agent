@@ -10,7 +10,8 @@ import {
   type LayoutRulesProfile,
   type PptCompositionMode,
   type PptPatternId,
-  type SummaryLineMode
+  type SummaryLineMode,
+  type SlideSubtitleMode
 } from '@shared/layout-rules'
 import { useLang } from '@renderer/i18n'
 import { useSettingsStore, useToastStore } from '@renderer/store'
@@ -193,6 +194,11 @@ export function LayoutRulesSettingsTab(): React.JSX.Element {
     { value: 'always', label: t('settings.layoutSummaryAlways') },
     { value: 'off', label: t('settings.layoutSummaryOff') }
   ]
+  const subtitleOptions: Array<SelectOption<SlideSubtitleMode>> = [
+    { value: 'on', label: t('settings.layoutSubtitleOn') },
+    { value: 'content-off', label: t('settings.layoutSubtitleContentOff') },
+    { value: 'off', label: t('settings.layoutSubtitleOff') }
+  ]
 
   const updateDraft = (patch: Partial<LayoutRulesProfile>): void => {
     setDraft((current) => normalizeLayoutRules({ ...current, ...patch }))
@@ -346,6 +352,12 @@ export function LayoutRulesSettingsTab(): React.JSX.Element {
             draft.summaryLineMode,
             summaryOptions,
             (summaryLineMode) => updateDraft({ summaryLineMode })
+          )}
+          {renderSelect(
+            t('settings.layoutSubtitleMode'),
+            draft.subtitleMode,
+            subtitleOptions,
+            (subtitleMode) => updateDraft({ subtitleMode })
           )}
         </div>
       </section>

@@ -82,7 +82,7 @@ export const buildPageBeautifySystemPrompt = (args: PageBeautifyPromptArgs): str
     '',
     '## Overflow recovery (required)',
     '- Treat clipped text, scroll containers, excessive fixed heights, too many stacked cards, too many table rows, or text that would need to be made unreadably small as layout defects that must be resolved before submission.',
-    '- For an overcrowded page, consolidate repeated prose into a concise hierarchy: a short title, a one-line takeaway, and grouped key points. Promote essential numbers and labels; remove redundancy through summarization rather than hiding text.',
+    '- For an overcrowded page, consolidate repeated prose into a concise hierarchy: a short title, a one-line takeaway (only when the user takeaway-line setting allows one), and grouped key points. Promote essential numbers and labels; remove redundancy through summarization rather than hiding text.',
     '- Never solve overflow by adding overflow-hidden, text truncation, ellipsis, scrolling, transform scaling, or smaller unreadable type. The complete submitted content must fit the target canvas without clipping or overlap.',
     '- Do not submit the original layout unchanged unless it already fits cleanly and has a clear visual hierarchy.',
     '',

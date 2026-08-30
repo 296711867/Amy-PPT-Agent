@@ -21,6 +21,9 @@ export type ContentModuleStyle = (typeof CONTENT_MODULE_STYLES)[number]
 export const SUMMARY_LINE_MODES = ['contextual', 'always', 'off'] as const
 export type SummaryLineMode = (typeof SUMMARY_LINE_MODES)[number]
 
+export const SLIDE_SUBTITLE_MODES = ['on', 'content-off', 'off'] as const
+export type SlideSubtitleMode = (typeof SLIDE_SUBTITLE_MODES)[number]
+
 export const PPT_PATTERN_IDS = [
   'hero-title-center',
   'hero-title-asymmetric',
@@ -108,7 +111,7 @@ export const PPT_PATTERN_GROUPS = [
 export const DEFAULT_EXPERT_LAYOUT_MARKDOWN = `## 专业 PPT 构图原则
 
 - 每页只承担一个叙事任务，先确定观众 3 秒内应该记住的核心判断，再选择版式。
-- 标题优先写成结论、判断或明确问题，不只写栏目名称；页面副标题服务整页，模块二级标题只服务所属内容模块。
+- 标题优先写成结论、判断或明确问题，不只写栏目名称；若使用整页副标题（以“页面副标题”设置为准），它服务整页，模块二级标题只服务所属内容模块。
 - 先判断内容关系，再从允许的 Pattern 中选择构图。不要先画等宽卡片，再把内容逐项塞进去。
 - 普通页面以 1 个主视觉或主论点加 1–3 组支撑内容为宜；信息过多时先压缩文案、合并同类项或更换表达方式。
 - 标题、多行正文和带解释的模块默认左对齐；短标签、单个数字、纯图标模块可居中，同组模块必须使用同一对齐系统。
@@ -116,7 +119,7 @@ export const DEFAULT_EXPERT_LAYOUT_MARKDOWN = `## 专业 PPT 构图原则
 - 图标或编号用于建立阅读顺序，可使用当前风格提供的圆形底托、渐变或轻质感，但不能机械地给每个模块都加装饰。
 - 胶囊只承载 2–3 个短关键词、分类或维度，不能做按钮，也不能放句子和普通正文。
 - 缺少必要图片时可使用比例明确、可替换的语义占位框；不要伪造照片，也不要把占位框当装饰。
-- 数据、比较、建议和教学页面可增加一句总结；标题已经表达相同结论时不要重复。
+- 数据、比较、建议和教学页面是否增加一句总结，以“页面总结句”设置为准；标题已经表达相同结论时不要重复。
 - 相邻页面避免重复相同轮廓、卡片网格和主视觉方向；常规内容页共用同一标题带（对齐、字号档位、装饰形态整套一致），整套演示的字体、间距和视觉语言保持一致。
 - 写入前检查：页面应像一张被设计过的 PPT，而不是网页组件库、后台 Dashboard 或产品设置页。`
 
@@ -147,6 +150,7 @@ export interface LayoutRulesProfile {
   iconBoxSize: number
   moduleTitleBodyGap: number
   summaryLineMode: SummaryLineMode
+  subtitleMode: SlideSubtitleMode
   expertMarkdown: string
 }
 
@@ -176,7 +180,8 @@ export const DEFAULT_LAYOUT_RULES: LayoutRulesProfile = Object.freeze({
   staircaseOffset: 64,
   iconBoxSize: 64,
   moduleTitleBodyGap: 8,
-  summaryLineMode: 'contextual',
+  summaryLineMode: 'off',
+  subtitleMode: 'content-off',
   expertMarkdown: DEFAULT_EXPERT_LAYOUT_MARKDOWN
 })
 
@@ -315,6 +320,7 @@ export function normalizeLayoutRules(value: unknown): LayoutRulesProfile {
       SUMMARY_LINE_MODES,
       DEFAULT_LAYOUT_RULES.summaryLineMode
     ),
+    subtitleMode: readEnum(input.subtitleMode, SLIDE_SUBTITLE_MODES, DEFAULT_LAYOUT_RULES.subtitleMode),
     expertMarkdown:
       isV3 && input.expertMarkdown === ''
         ? ''
@@ -364,6 +370,13 @@ const SUMMARY_RULES: Record<SummaryLineMode, string> = {
   always:
     'Add one concise takeaway line below the title or near the bottom on normal content slides; do not duplicate the title wording.',
   off: 'Do not add a separate takeaway line unless the user explicitly requests one.'
+}
+
+const SUBTITLE_RULES: Record<SlideSubtitleMode, string> = {
+  on: 'Slide-level subtitles are allowed when they add real information. A slide subtitle belongs to the whole page; a module title belongs only to its content block.',
+  'content-off':
+    'Do not add a slide-level subtitle or whole-page lead line on normal content slides; compose the page from the slide title and content modules instead. Keep subtitles only on cover, section-divider, and quote-style pages.',
+  off: 'Do not add a slide-level subtitle or whole-page lead line on any page, including cover and section-divider pages; the main title alone carries the page. This overrides any other subtitle guidance.'
 }
 
 type LayoutRulesCanvas = {
@@ -423,13 +436,22 @@ export function buildLayoutRulesPrompt(value: unknown, canvas?: LayoutRulesCanva
     `- Content modules: ${MODULE_STYLE_RULES[rules.contentModuleStyle]}`,
     `- Normal slide capacity: at most ${rules.maxContentBlocks} primary content blocks, with one core message and one dominant visual focus. When a hero visual, chart, metric, or central statement is present, reserve at least about ${rules.heroMinPercent}% of the usable composition for it.`,
     `- Safe content area: ${buildSafeAreaRule(rules, canvas)}`,
-    `- Type hierarchy on this canvas: deck/cover title about ${typography.deckTitle}px; slide title about ${typography.slideTitle}px; slide subtitle or whole-page lead about ${typography.slideSubtitle}px; module second-level title about ${typography.moduleTitle}px; body about ${typography.body}px; emphasis number or short phrase about ${typography.emphasis}px; auxiliary/source text about ${typography.auxiliary}px. A slide subtitle belongs to the whole page; a module title belongs only to its content block.`,
+    `- Type hierarchy on this canvas: deck/cover title about ${typography.deckTitle}px; slide title about ${typography.slideTitle}px;${
+      rules.subtitleMode === 'off'
+        ? ''
+        : ` slide subtitle or whole-page lead about ${typography.slideSubtitle}px;`
+    } module second-level title about ${typography.moduleTitle}px; body about ${typography.body}px; emphasis number or short phrase about ${typography.emphasis}px; auxiliary/source text about ${typography.auxiliary}px.${
+      rules.subtitleMode === 'off'
+        ? ''
+        : ' A slide subtitle belongs to the whole page; a module title belongs only to its content block.'
+    }`,
     '- Alignment: left-align slide titles, module titles, and multi-line body copy by default. Center only short labels, one metric, or pure icon-led content. 同一组并列模块（同一行或同一容器的兄弟卡片）的 justify-* 与 items-* 必须完全一致——禁止把 justify-start 与 justify-center 混用，否则顶部和底部永远无法对齐。',
     `- Spacing system: use about ${rules.cardPadding}px internal inset when a module needs a boundary, ${rules.cardGap}px between peer modules, ${rules.titleContentGap}px from the title region to main content, ${rules.sectionGap}px between primary zones, and ${rules.moduleTitleBodyGap}px between a module title and its body. Equal relationships must use equal spacing. 同一组并列卡片必须共用完全相同的外框样式（border、background、圆角、padding、shadow 逐项一致），并且顶部和底部落在同一条基准线上；高度不齐时用 grid items-stretch 或 flex-1 让它们等高撑满同一容器，而不是用各自自然高度。`,
     `- Staircase strips: for 3-5 ordered items, use horizontal flat strips with an icon/number zone around ${rules.iconBoxSize}px, a module title, and 1-2 body lines. Offset each strip horizontally by about ${rules.staircaseOffset}px while preserving usable width and the safe area.`,
     `- Icons and media: use icons or numbers only when they clarify scanning or order. A restrained style-owned circular backing or gradient is allowed. 同一组并列卡片里的图标要么每张都有、要么都没有，底托尺寸、形状、配色、描边必须完全一致（建议整套 deck 统一为约 ${rules.iconBoxSize}px 的圆形底托）；图标不得只出现在组内个别卡片上。 When a required image is unavailable, use a clean, replaceable data-role="image-placeholder" rectangle with an intentional aspect ratio; never invent a fake photo.`,
     '- Pills and cards: pills carry only 2-3 short keywords or dimensions and are never buttons. Cards are for genuinely independent, parallel, comparable information, not ordinary paragraphs.',
     `- Takeaway line: ${SUMMARY_RULES[rules.summaryLineMode]}`,
+    `- Slide subtitle: ${SUBTITLE_RULES[rules.subtitleMode]}`,
     '',
     '### Deck-level structural consistency (硬契约，整套 deck 必须统一)',
     '以下基准对整套演示的每一页都强制生效，优先级高于单页的“避免重复”——它们是 deck 级一致性，不得为某一页变化而破坏。',
@@ -438,7 +460,9 @@ export function buildLayoutRulesPrompt(value: unknown, canvas?: LayoutRulesCanva
     `- 图标基准：同一组并列卡片的图标要么全有、要么全无，底托统一为约 ${rules.iconBoxSize}px 的圆形（尺寸、形状、配色、描边完全一致）；不允许组内只有部分卡片带图标。`,
     '- 对齐基准：同一组并列模块（同行或同一容器的兄弟卡片）的 justify-* 与 items-* 必须完全一致，顶部和底部落在同一基准线上；高度不齐时用 grid items-stretch 或 flex-1 等高撑满容器，不用各自自然高度，更不得把 justify-start 与 justify-center 混用。',
     '- 形态同构：同一行或同一容器内的并列模块必须是同一种内容形态（同为图文模块、同为数据卡、同为编号条），不得把图文模块、大圆图标、网格卡片等异构形态混排进同一并列组——否则永远拼不出对齐的统一矩形。',
-    `- 标题带基准：常规内容页（非封面/金句/全图页）共用同一标题带——标题对齐统一（默认左对齐，与 ${rules.safeAreaHorizontalPercent}% 安全区左缘同线）、字号统一为 slide title 档（约 ${typography.slideTitle}px）、标题到内容的间距统一为约 ${rules.titleContentGap}px；kicker/眉标、标题装饰线等标题带元素要么整套都有、要么整套都没有，样式逐项一致，小于 18px 的眉标必须标记 data-ppt-text-role="auxiliary"（且 ≥12px），副标题按正文下限 ≥18px。逐页变化只允许发生在主视觉与内容区，不得更换标题位置、对齐或装饰形态。`,
+    `- 标题带基准：常规内容页（非封面/金句/全图页）共用同一标题带——标题对齐统一（默认左对齐，与 ${rules.safeAreaHorizontalPercent}% 安全区左缘同线）、字号统一为 slide title 档（约 ${typography.slideTitle}px）、标题到内容的间距统一为约 ${rules.titleContentGap}px；kicker/眉标、标题装饰线等标题带元素要么整套都有、要么整套都没有，样式逐项一致，小于 18px 的眉标必须标记 data-ppt-text-role="auxiliary"（且 ≥12px）${
+      rules.subtitleMode === 'off' ? '' : '，副标题按正文下限 ≥18px'
+    }。逐页变化只允许发生在主视觉与内容区，不得更换标题位置、对齐或装饰形态。`,
     '',
     '### Web-layout failure check',
     '- Is the page merely an equal-width card grid?',

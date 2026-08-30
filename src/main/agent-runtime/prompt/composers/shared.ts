@@ -132,7 +132,7 @@ export function buildCanvasConstraints(input: SlideSizePreset): string {
     slideSize.id === 'xiaohongshu-note'
       ? `- 小红书画布按图文笔记组织：强化标题、视觉锚点与信息层级，优先上下模块栈和分段叙事；不要套用 16:9 PPT 骨架，必须使用 ${RED_LAYOUT_SKILL_NAME}。`
       : isPortrait
-        ? `- 这是非 PPT 竖版画布：优先顶部标题 + 中部主体 + 底部结论的纵向叙事或上下模块栈，不要照搬横向三列；必须使用 ${layoutSkillName}。`
+        ? `- 这是非 PPT 竖版画布：优先顶部标题 + 中部主体 + 底部结论（仅当总结句设置允许时）的纵向叙事或上下模块栈，不要照搬横向三列；必须使用 ${layoutSkillName}。`
         : slideSize.id === 'square-1-1'
           ? `- 这是 1:1 方形画布：围绕中心焦点、四象限/上下两段/中心主体 + 周边支撑组织，避免套用宽屏 PPT 骨架；必须使用 ${layoutSkillName}。`
         : slideSize.id === 'standard-4-3'

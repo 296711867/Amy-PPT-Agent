@@ -22,7 +22,7 @@ function formatVisualFormatPrompt(format: VisualFormat | undefined): string {
     const kind = format.slice('diagram-'.length)
     return [
       `Planned visual format: ${format} — the deck planner decided this slide is a ${kind} diagram page.`,
-      `- Make one inline SVG ${kind} diagram the page's main visual instead of stacking text cards or generic modules; keep a one-line takeaway near the diagram.`,
+      `- Make one inline SVG ${kind} diagram the page's main visual instead of stacking text cards or generic modules; add a one-line takeaway near the diagram only if the user takeaway-line setting allows one.`,
       `- Diagram geometry (elbow connectors, masked labels, node budgets, accent discipline) follows the ${DIAGRAM_SKILL_NAME} skill. Before drawing: ${formatSkillUsageRequirement(DIAGRAM_SKILL_NAME)}`
     ].join('\n')
   }
@@ -215,7 +215,7 @@ export function buildSinglePageGenerationPrompt(args: {
       ? '- The selected layout ID is a hard PPT composition contract. Preserve its exact module count, row/column relationship, alignment system, and image-slot rule.'
       : '',
     args.layoutId
-      ? '- Do not create extra equal-weight cards, image frames, columns, or repeated panels beyond the selected module count. Supporting text must stay inside the planned modules or in one concise page-level takeaway.'
+      ? '- Do not create extra equal-weight cards, image frames, columns, or repeated panels beyond the selected module count. Supporting text must stay inside the planned modules or, when the user takeaway-line setting allows one, in a single concise page-level takeaway.'
       : '',
     requiredImageAspect
       ? `- Image-frame geometry is fixed as ${requiredImageAspect}. Do not convert portrait rows into landscape grids or mixed feature collages. Preserve identical aspect-ratio CSS for equal image slots.`
