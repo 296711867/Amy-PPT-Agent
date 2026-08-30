@@ -15,7 +15,7 @@ import {
   readLayoutManifest,
   readLayoutSkeleton
 } from '../layout-assets/library'
-import { fillLayoutAsset, blankMetricSlots } from '../layout-assets/fill'
+import { fillLayoutAsset, blankMetricSlots, ensurePageShell } from '../layout-assets/fill'
 import {
   normalizeLayoutAsset
 } from '@shared/layout-asset'
@@ -145,7 +145,7 @@ const refillAndWrite = async (
   if (!assetRecord) throw new Error(`版式资产不存在: ${assetId}`)
   const asset = normalizeLayoutAsset(assetRecord)
   if (!asset) throw new Error('版式资产格式不合法')
-  const skeleton = await readLayoutSkeleton(asset)
+  const skeleton = ensurePageShell(await readLayoutSkeleton(asset))
 
   const listItems = overrides.listItems ?? binding.contentPackage.listItems
   const palette = overrides.palette ?? binding.palette

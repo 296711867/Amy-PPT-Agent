@@ -72,6 +72,44 @@ const replaceMediaSrc = (html: string, slotId: string, src: string): string => {
   return html.slice(0, match.index) + match[1] + nextInner + `</${match[2]}>` + html.slice((match.index || 0) + match[0].length)
 }
 
+const PAGE_ROOT_OPEN_RE = /<([a-z0-9]+)\b[^>]*\bclass="[^"]*\bppt-page-root\b[^"]*"[^>]*>/i
+
+/**
+ * 给缺壳的骨架补上页面契约要求的结构：`.ppt-page-root[data-ppt-guard-root="1"]`
+ * 与 root 内的 `.ppt-page-content` 包裹层。内置/旧版骨架只有裸 root，
+ * 会被 validatePersistedPageHtml 与渲染快照脚本拒绝。幂等：已含壳的骨架原样返回。
+ * 包裹层不带定位样式，不改变绝对定位块的包含块，布局不受影响。
+ */
+export function ensurePageShell(html: string): string {
+  if (html.includes('data-ppt-guard-root=') && html.includes('ppt-page-content')) return html
+  const rootOpen = html.match(PAGE_ROOT_OPEN_RE)
+  if (!rootOpen) return html
+  const rootTag = rootOpen[1]
+  let rootOpenTag = rootOpen[0]
+  if (!/\bdata-ppt-guard-root=/.test(rootOpenTag)) {
+    rootOpenTag = rootOpenTag.replace(/\s*\/?>$/, ' data-ppt-guard-root="1"$&')
+  }
+  const rootCloseTag = `</${rootTag}>`
+  const rootCloseIndex = html.lastIndexOf(rootCloseTag)
+  if (rootCloseIndex < 0) {
+    // 找不到闭合标签：只补守卫标记，交给后续结构校验兜底。
+    return html.replace(PAGE_ROOT_OPEN_RE, rootOpenTag)
+  }
+  const afterOpenIndex = (rootOpen.index || 0) + rootOpen[0].length
+  const inner = html.slice(afterOpenIndex, rootCloseIndex)
+  if (inner.includes('ppt-page-content')) {
+    return html.slice(0, rootOpen.index || 0) + rootOpenTag + inner + html.slice(rootCloseIndex)
+  }
+  return (
+    html.slice(0, rootOpen.index || 0) +
+    rootOpenTag +
+    '<div class="ppt-page-content">' +
+    inner +
+    '</div>' +
+    html.slice(rootCloseIndex)
+  )
+}
+
 const listItemsFor = (slot: LayoutAssetListSlot, content: LayoutFillContent): string[] => {
   const items = (content.listItems || []).map((item) => item.trim()).filter(Boolean)
   if (items.length === 0) return slot.sample
@@ -148,9 +186,16 @@ export function fillLayoutAsset(
         })
       clones.push(`${cloneTag}${item}</${openTagMatch[2]}>`)
     })
-    // 克隆块插回模板块原位置（模板块已删除，插到其后的锚点：直接追加到 body 结束标签前）
+    // 克隆块插回模板块原位置：插到 .ppt-page-root 闭合标签前，保证克隆项仍落在
+    // root（以及 ensurePageShell 补的 .ppt-page-content）内——渲染快照、编辑器
+    // 和导出都以 root 为边界，落在 </body> 前的克隆会被整条链路漏掉。
+    const rootOpenMatch = html.match(PAGE_ROOT_OPEN_RE)
+    const rootCloseIndex = rootOpenMatch
+      ? html.lastIndexOf(`</${rootOpenMatch[1]}>`)
+      : -1
     const bodyClose = html.lastIndexOf('</body>')
-    const insertAt = bodyClose >= 0 ? bodyClose : html.length
+    const insertAt =
+      rootCloseIndex >= 0 ? rootCloseIndex : bodyClose >= 0 ? bodyClose : html.length
     html = html.slice(0, insertAt) + clones.join('') + html.slice(insertAt)
   }
 

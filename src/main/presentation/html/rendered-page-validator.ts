@@ -60,10 +60,12 @@ const SCALE_FLOOR = 0.92
 const EDGE_TOLERANCE_PX = 2
 const OVERLAP_MIN_RATIO = 0.2
 const OVERLAP_MIN_AXIS_PX = 3
-// 隐藏校验窗口每次超时后被销毁，下一页要付完整冷启动（新 renderer + 字体 + GPU）。
-// 高负载机器上 10s 会让整套页面全部误判超时（实测 6/6 页 render validation timeout），
-// 抬到 25s 并在超时后用新窗口重试一次。
+// 环境抖动（高负载、冷启动、GPU 初始化）会让整套页面全部超时。策略：
+// 1) 校验窗口跨页复用，超时后只 stop 当前加载、不销毁窗口，避免每页付完整冷启动；
+// 2) loadURL 单独限界，卡住的加载主动 stop 并用同一个暖窗口重试一次；
+// 3) 最终仍超时按"基础设施不可用"上报，由 deck 门禁降级为非阻断（见 deck-render-gate）。
 const VALIDATION_TIMEOUT_MS = 25_000
+const PAGE_LOAD_TIMEOUT_MS = 15_000
 const VALIDATION_TIMEOUT_ATTEMPTS = 2
 const MASTER_STYLE_TIMEOUT_MS = 5_000
 const intersection = (a: RenderedRect, b: RenderedRect): RenderedRect => {
@@ -359,6 +361,16 @@ const destroyValidationWindow = (): void => {
   window.destroy()
 }
 
+/** 中断当前页面加载并回到空白页，保留暖窗口给下一次校验复用。 */
+const resetValidationWindowLoad = (window: BrowserWindow): void => {
+  if (window.isDestroyed()) return
+  try {
+    window.webContents.stop()
+  } catch {
+    // Renderer may already be tearing down.
+  }
+}
+
 const ensureValidationWindow = (slideSize: SlideSizePreset): BrowserWindow => {
   if (validationWindow && !validationWindow.isDestroyed()) {
     validationWindow.setContentSize(slideSize.width, slideSize.height)
@@ -483,7 +495,12 @@ const inspectRenderedPageOnce = async (args: {
     '_pptMasterElementsExpected',
     fs.existsSync(path.join(path.dirname(args.targetPath), 'master', 'master.html')) ? '1' : '0'
   )
-  await withTimeout(window.loadURL(pageUrl.toString()), VALIDATION_TIMEOUT_MS)
+  await withTimeout(window.loadURL(pageUrl.toString()), PAGE_LOAD_TIMEOUT_MS).catch((error) => {
+    // 卡住的加载会让 did-finish-load 永远不来；主动 stop 中断加载再抛出，
+    // 让上层用同一个暖窗口重试，而不是把冷启动成本摊到后续每一页。
+    resetValidationWindowLoad(window)
+    throw error
+  })
   await withTimeout(
     window.webContents.executeJavaScript(WAIT_FOR_RENDERED_PAGE_READY_SCRIPT, true),
     VALIDATION_TIMEOUT_MS
@@ -507,7 +524,8 @@ const reportValidationUnavailable = (args: {
     targetPath: args.targetPath,
     unavailableReason
   })
-  destroyValidationWindow()
+  // 不销毁窗口：脚本级失败（如 render-root-missing）不会污染渲染进程，
+  // 保留暖窗口让下一页免付冷启动；只有超时才由上层决定销毁重建。
   return { available: false, unavailableReason }
 }
 
@@ -523,16 +541,26 @@ const inspectRenderedPage = async (args: {
     try {
       return await inspectRenderedPageOnce(args)
     } catch (error) {
-      // 超时大概率是环境问题（冷启动窗口/字体/GPU），换一个新窗口重试一次；
+      // 超时大概率是环境问题（冷启动窗口/字体/GPU）：stop 当前加载、保留暖窗口重试一次；
       // 非超时错误（文件缺失、脚本异常）重试没有意义。
       const timedOut = isRenderValidationTimeout(error) && attempt < VALIDATION_TIMEOUT_ATTEMPTS
-      if (!timedOut) return reportValidationUnavailable({ ...args, error })
-      destroyValidationWindow()
-      log.warn('[deepagent] rendered page validation timed out, retrying once', {
-        pageId: args.pageId,
-        targetPath: args.targetPath,
-        attempt
-      })
+      if (timedOut) {
+        resetValidationWindowLoad(
+          ensureValidationWindow(args.slideSize)
+        )
+        log.warn('[deepagent] rendered page validation timed out, retrying once', {
+          pageId: args.pageId,
+          targetPath: args.targetPath,
+          attempt
+        })
+        continue
+      }
+      if (isRenderValidationTimeout(error)) {
+        // 最终仍超时：销毁窗口避免半加载状态串页，但按基础设施不可用上报，
+        // 不应让整副 deck 被判失败（deck-render-gate 会把 timeout 归为非阻断）。
+        destroyValidationWindow()
+      }
+      return reportValidationUnavailable({ ...args, error })
     }
   }
   return { available: false, unavailableReason: 'render validation timeout' }

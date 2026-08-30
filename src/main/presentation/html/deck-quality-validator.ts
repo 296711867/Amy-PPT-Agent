@@ -401,14 +401,14 @@ export async function inspectPresentationDeckQuality(
 
   const renderValidationComplete =
     args.pages.length > 0 && unavailablePages.length === 0 && pages.length === args.pages.length
-  const violations = renderValidationComplete
-    ? evaluateDeckQuality({
-        pages,
-        slideSize: args.slideSize,
-        designContract: args.designContract,
-        preserveTemplate: args.preserveTemplate
-      })
-    : []
+  // 部分页面拿不到渲染结果时，仍对已渲染页执行跨页评估（各规则自带样本数下限），
+  // 避免环境抖动把整套一致性检查整体跳过——否则标题带/字体/版式节奏问题无人兜底。
+  const violations = evaluateDeckQuality({
+    pages,
+    slideSize: args.slideSize,
+    designContract: args.designContract,
+    preserveTemplate: args.preserveTemplate
+  })
   if (unavailablePages.length > 0) {
     const unavailablePageIds = unavailablePages.map((page) => page.pageId)
     violations.push({

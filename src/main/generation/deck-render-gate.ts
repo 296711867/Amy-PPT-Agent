@@ -4,7 +4,7 @@ export type DeckRenderGateReport = {
 }
 
 const NON_BLOCKING_RENDER_INFRASTRUCTURE_RE =
-  /ERR_BLOCKED_BY_CLIENT|Electron app is not ready|BrowserWindow.*(?:destroyed|unavailable)|renderer unavailable/i
+  /ERR_BLOCKED_BY_CLIENT|Electron app is not ready|BrowserWindow.*(?:destroyed|unavailable)|renderer unavailable|render validation timeout/i
 
 export const isNonBlockingRenderInfrastructureFailure = (reason: string): boolean =>
   NON_BLOCKING_RENDER_INFRASTRUCTURE_RE.test(reason)

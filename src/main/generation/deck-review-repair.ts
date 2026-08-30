@@ -157,9 +157,11 @@ export const runDeckReviewAndRepair = async (context: {
       })
     }
 
-    const hardViolations = deckReport.available
-      ? deckReport.violations.filter((violation) => violation.severity === 'error')
-      : []
+    // available=false 只代表"有页面没渲染出指标"，已渲染页的评估结果（含 hard violations）
+    // 仍然可信，继续参与定向修复；deck-render-validation-unavailable 本身是 warn 不入列。
+    const hardViolations = deckReport.violations.filter(
+      (violation) => violation.severity === 'error'
+    )
     const repairPageIds = Array.from(
       new Set(hardViolations.flatMap((violation) => violation.pageIds))
     )

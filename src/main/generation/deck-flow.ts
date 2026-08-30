@@ -30,7 +30,12 @@ import { retireActiveSessionPagesForReplacement } from './session-page-replaceme
 import { prepareDeckImageAssets } from './deck-images'
 import { assignDeckBackgroundAssets, prepareDeckBackgroundAssets } from './deck-backgrounds'
 import { assignLayoutAssetsToOutline } from '@shared/layout-asset'
-import { blankMetricSlots, contentPackageToFill, fillLayoutAsset } from '../layout-assets/fill'
+import {
+  blankMetricSlots,
+  contentPackageToFill,
+  ensurePageShell,
+  fillLayoutAsset
+} from '../layout-assets/fill'
 import {
   ensureLayoutLibrary,
   readLayoutManifest,
@@ -774,7 +779,9 @@ export async function executeDeckGeneration(
     try {
       let skeleton = skeletonCache.get(assigned.id)
       if (skeleton === undefined) {
-        skeleton = await readLayoutSkeleton(assigned)
+        // 旧版/内置骨架可能缺 guard root 与 .ppt-page-content，先补壳再填充，
+        // 否则 persistCompletedGeneratedPage 的落盘校验会把每张锁定页都判死。
+        skeleton = ensurePageShell(await readLayoutSkeleton(assigned))
         skeletonCache.set(assigned.id, skeleton)
       }
       const outline = outlineItems[index]

@@ -11,7 +11,9 @@ import { customAlphabet } from 'nanoid'
 import type { LayoutAsset, LayoutAssetManifest } from '@shared/layout-asset'
 import { buildLayoutAssetFromPageHtml } from './parametrize'
 
-export const BUILTIN_LAYOUTS_VERSION = 1
+// v2: 骨架补上 data-ppt-guard-root 与 .ppt-page-content 壳层，否则锁定页
+// 全部过不了落盘校验而回退自由创作。
+export const BUILTIN_LAYOUTS_VERSION = 2
 
 const builtinIdSuffix = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 6)
 
