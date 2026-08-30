@@ -45,6 +45,60 @@ describe('ensurePageShell', () => {
   })
 })
 
+describe('fillLayoutAsset directed slot text', () => {
+  const coverAsset = {
+    id: 'asset-cover-test',
+    title: 'test cover',
+    roles: ['cover'],
+    slideSizeId: 'wide-16-9',
+    source: 'authored',
+    skeletonPath: 'skeletons/asset-cover-test.html',
+    slots: [
+      { kind: 'title', slotId: 'title', maxChars: 20, sample: '演示文稿主标题' },
+      { kind: 'label', slotId: 'kicker', maxChars: 12, sample: '行业研究 · 2026' },
+      { kind: 'label', slotId: 'subtitle', maxChars: 20, sample: '副标题：一句话说明本次演示的核心主张' },
+      { kind: 'label', slotId: 'footer', maxChars: 24, sample: '汇报人 · 部门 · 日期' }
+    ]
+  } as unknown as LayoutAsset
+
+  const coverSkeleton = `<!doctype html>
+<html><head></head><body>
+<main class="ppt-page-root" data-ppt-slide-size-id="wide-16-9" data-ppt-width="1600" data-ppt-height="900">
+  <section data-block-id="kicker" style="position:absolute;left:160px;top:190px;width:900px;height:34px">行业研究 · 2026</section>
+  <section data-block-id="title" style="position:absolute;left:160px;top:240px;width:1100px;height:110px">演示文稿主标题</section>
+  <section data-block-id="subtitle" style="position:absolute;left:160px;top:390px;width:900px;height:44px">副标题：一句话说明本次演示的核心主张</section>
+  <section data-block-id="footer" style="position:absolute;left:160px;top:730px;width:700px;height:28px">汇报人 · 部门 · 日期</section>
+</main>
+</body></html>`
+
+  it('fills kicker/subtitle/footer by slotId instead of shipping sample copy (I-10)', () => {
+    const filled = fillLayoutAsset(coverAsset, coverSkeleton, {
+      title: '星光熠熠：救赎与成长之路',
+      slotText: {
+        kicker: '小马宝莉',
+        subtitle: '从反派到导师的救赎之旅',
+        footer: '小马宝莉 · 角色介绍'
+      }
+    })
+    expect(filled).toContain('星光熠熠：救赎与成长之路')
+    expect(filled).toContain('小马宝莉')
+    expect(filled).toContain('从反派到导师的救赎之旅')
+    expect(filled).toContain('小马宝莉 · 角色介绍')
+    expect(filled).not.toContain('行业研究')
+    expect(filled).not.toContain('副标题：一句话')
+    expect(filled).not.toContain('汇报人')
+  })
+
+  it('truncates directed text to the slot character budget', () => {
+    const filled = fillLayoutAsset(coverAsset, coverSkeleton, {
+      title: 'T',
+      slotText: { kicker: '这是一段超长的眉标文本需要被截断处理才行' }
+    })
+    expect(filled).not.toContain('超长的眉标文本需要被截断处理才行')
+    expect(filled).toContain('这是一段超长的眉标')
+  })
+})
+
 describe('fillLayoutAsset clone placement', () => {
   it('keeps cloned list items inside the page root', () => {
     const asset = {

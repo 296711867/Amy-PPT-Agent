@@ -833,10 +833,21 @@ export async function executeDeckGeneration(
         : structuredEntries.map((entry) => entry.label)
       const metricValues = structuredFill.metrics || []
       const body = [outline.contentOutline, ...leftoverLabels].filter(Boolean).join('；')
+      // I-10：kicker/subtitle/footer 语义槽没有内容包字段，不定向填就会把骨架
+      // 示例文案（"副标题：一句话说明…"、"行业研究 · 2026"）原样发给用户。
+      const topicLead = (context.topic || context.deckTitle || '').split(/[：:]/)[0].trim()
+      const subtitleSource =
+        structuredEntries[0]?.label?.trim() || outline.contentOutline?.trim() || ''
+      const slotText: Record<string, string> = {
+        kicker: topicLead || context.deckTitle || '',
+        subtitle: subtitleSource || outline.title,
+        footer: context.deckTitle || context.topic || ''
+      }
       let filled = fillLayoutAsset(assigned, skeleton, {
         title: outline.title,
         body,
         listItems,
+        slotText,
         ...(metricValues.length > 0 ? { metrics: metricValues } : {})
       })
       filled = blankMetricSlots(assigned, filled)

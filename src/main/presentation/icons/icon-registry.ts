@@ -271,6 +271,19 @@ export function isKnownIconId(id: string): boolean {
   return cache ? cache.idSet.has(id) : false
 }
 
+/**
+ * 把模型的简写图标 id 解析成全集 id（I-9）：如 "graduation" → "graduation-cap"。
+ * 只在"唯一前缀命中"时返回（候选多于一个无法确定意图，交回校验层列候选）。
+ */
+export function resolveCloseIconId(id: string): string | null {
+  const normalized = id.trim().toLowerCase()
+  if (!normalized || isKnownIconId(normalized)) return null
+  const matches = (cache?.ids || []).filter(
+    (candidate) => candidate === normalized || candidate.startsWith(`${normalized}-`)
+  )
+  return matches.length === 1 ? matches[0] : null
+}
+
 export function getIconViewBox(): string {
   return loadIconLibrary().viewBox
 }

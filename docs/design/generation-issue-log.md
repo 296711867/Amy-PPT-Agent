@@ -63,9 +63,27 @@
 - **修复**（本轮）：新增 `applyContractPalette`——收集页面 hex 色，按亮度排序映射到 `designContract.palette`（保持明暗次序），确定性替换；deck-flow 锁定快速通道接上。
 - **验证**：`tests/unit/layout-assets/palette.test.ts`。
 
+## I-9 `unknown-icon-id` 导致整页重试耗尽（P4 失败的直接死因）
+
+- **现象**：P4《成长之路》三次尝试全死在 `unknown-icon-id: 未知图标 id "graduation"`（lucide 全集里是 `graduation-cap`），页面留 scaffold，1/6 失败。
+- **根因**：与 I-3 同模式——校验错误信息只说"未知 id"不给候选，模型重试原样重写同一个简写 id。
+- **修复**（本轮）：
+  1. `resolveCloseIconId`：唯一前缀命中时在 `replaceDataIcons` 里确定性自动纠正（`graduation` → `graduation-cap`），多候选（如 `arrow`）不猜；
+  2. 校验错误信息列出唯一纠正或模糊搜索候选（`可改用：xxx、yyy`），重试反馈可执行。
+- **验证**：`tests/unit/presentation/data-icon-replacer.test.ts`、`page-quality-validator.test.ts`。
+
+## I-10 锁定封面/结尾页把骨架示例文案原样发给用户
+
+- **现象**：封面 kicker 显示"行业研究 · 2026"、subtitle 显示"副标题：一句话说明本次演示的核心主张"、footer 显示"汇报人 · 部门 · 日期"——全是内置骨架的示例文案，只有 title 被真正填充。这是"首页效果差"的直接原因（叠加用户关闭副标题设置后更显空洞）。
+- **根因**：`fillLayoutAsset` 按 kind 推导填充（title/body/label/metric），kicker/subtitle/footer 被归为 label，而 deck-flow 锁定快速通道只传 title/body/listItems/metrics——label 槽永远拿不到内容，示例文案漏到最终产物。
+- **修复**（本轮）：`LayoutFillContent` 新增 `slotText`（按 slotId 定向填文本、按槽位 maxChars 截断）；deck-flow 锁定填充传入 kicker=主题前缀（`小马宝莉：星光熠熠角色介绍` 取 `：` 前段）、subtitle=大纲第一个要点、footer=deck 标题。
+- **验证**：`tests/unit/layout-assets/fill.test.ts` directed slot text 用例。
+
 ---
 
 ## 已知观测点（未立案，等真实运行数据）
 
 - 单页写入耗时偶发 12s+（疑 `serializedWrite` 与并发渲染验收排队）。
-- 模型偶发空响应（final assistant text 为空），疑供应商侧截断；I-7 修复后如仍高频，再立案加重试策略。
+- 模型偶发空响应（final assistant text 为空、无工具调用，15:18:29 / 15:20:34 两次），重试即恢复；疑供应商侧截断或内容过滤。I-7 的观测日志已就位，若高频再立案。
+- 15:21 会话中 P2 的一次"未写入"判罚出现在写盘工具开始执行之前（日志时序 29.589 判罚 → 29.966 工具调用记录），双 worker 并发日志交错下尚未定论，待复现。
+- 2026-08-30 15:18 会话验证：I-5 占位图（P2/P3/P5 各 1/2/3 个）、I-8 调色（locked 页紫色主题）、I-6（无背景图误报）均已生效。

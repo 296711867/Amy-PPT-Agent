@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio'
 import type { AnyNode } from 'domhandler'
 import type { SlideSizePreset } from '@shared/slide-size'
-import { isKnownIconId } from '../icons/icon-registry'
+import { isKnownIconId, resolveCloseIconId, searchIcons } from '../icons/icon-registry'
 
 /**
  * Harness 质量校验器。
@@ -427,11 +427,22 @@ export function validatePageQuality(
       return
     }
     if (id && !isKnownIconId(id)) {
+      // I-9：错误信息必须带可执行的候选——只说"未知 id"模型重试会原样重写
+      // （实测 graduation 重试三次全部失败）。优先给唯一前缀纠正，其次列模糊搜索候选。
+      const closeId = resolveCloseIconId(id)
+      const suggestions =
+        closeId !== null
+          ? [closeId]
+          : searchIcons(id, 5)
+              .map((item) => item.id)
+              .filter(Boolean)
+      const suggestionText =
+        suggestions.length > 0 ? `可改用：${suggestions.join('、')}` : '调用 search_icons 工具查正确 id'
       violations.push({
         code: 'unknown-icon-id',
         severity: 'error',
         detail: `未知图标 id "${id}"，不在可用图标库中（拼写错误？）`,
-        fix: '检查 id 拼写，或调用 search_icons 工具用关键词（如"增长/箭头/用户"）查正确 id'
+        fix: `把 data-icon="${id}" 改成正确 id；${suggestionText}`
       })
     }
   })

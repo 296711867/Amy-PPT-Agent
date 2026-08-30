@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { replaceDataIcons } from '../../../src/main/presentation/icons/data-icon-replacer'
 
 describe('replaceDataIcons', () => {
+  it('auto-corrects an unknown id with a unique prefix match (I-9)', () => {
+    // 实测：模型反复写 data-icon="graduation"，三次重试全部耗尽整页失败
+    const html = '<svg data-icon="graduation" class="w-12 h-12"></svg>'
+    const { html: out, unknownIds } = replaceDataIcons(html)
+    expect(unknownIds).toEqual([])
+    expect(out).toMatch(/<path[^>]*d="/)
+    expect(out).not.toContain('data-icon')
+  })
+
+  it('keeps an ambiguous unknown id for the validator to report', () => {
+    // "arrow" 有多个前缀命中（arrow-up/arrow-down/...），不能猜
+    const html = '<svg data-icon="arrow"></svg>'
+    const { unknownIds } = replaceDataIcons(html)
+    expect(unknownIds).toContain('arrow')
+  })
+
   it('replaces a known icon id with inline lucide svg, preserving class', () => {
     const html = '<div><svg data-icon="rocket" class="w-12 h-12 text-blue-500"></svg></div>'
     const { html: out, unknownIds } = replaceDataIcons(html)

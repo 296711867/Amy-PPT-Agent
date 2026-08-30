@@ -242,6 +242,23 @@ describe('validatePageQuality', () => {
       ])
     })
 
+    it('suggests concrete replacements for a near-miss icon id (I-9)', () => {
+      // "arrow" 多前缀命中，无法唯一纠正 → 校验必须列出候选，否则模型重试原样重写
+      const html = wrap(
+        '<div class="px-24"><h1 class="text-5xl">Icon reference</h1><svg data-icon="arrow" class="w-12 h-12"></svg></div>'
+      )
+      const violations = validatePageQuality(html, wide).filter(
+        (item) => item.code === 'unknown-icon-id'
+      )
+
+      expect(violations).toEqual([
+        expect.objectContaining({
+          severity: 'error',
+          fix: expect.stringMatching(/data-icon="arrow" 改成正确 id；可改用：\S+/)
+        })
+      ])
+    })
+
     it('rejects an empty icon id', () => {
       const html = wrap(
         '<div class="px-24"><h1 class="text-5xl">Icon reference</h1><svg data-icon=""></svg></div>'

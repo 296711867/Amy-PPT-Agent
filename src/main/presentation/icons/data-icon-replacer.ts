@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio'
-import { getIconInner, getIconStrokeAttrs, getIconViewBox } from './icon-registry'
+import log from 'electron-log/main.js'
+import { getIconInner, getIconStrokeAttrs, getIconViewBox, resolveCloseIconId } from './icon-registry'
 
 const SAFE_ROOT_ATTRIBUTES = new Set([
   'class',
@@ -65,7 +66,30 @@ export function replaceDataIcons(html: string): { html: string; unknownIds: stri
     }
     const inner = getIconInner(id)
     if (inner === null) {
-      // 未知 id：保留原样，交给 validator 报 unknown-icon-id
+      // 未知 id：先试唯一前缀纠正（"graduation" → "graduation-cap"，I-9）。
+      // 模型重复写同一个简写 id 曾把整页重试耗尽；确定性纠正零成本且安全，
+      // 仅在唯一命中时替换，多候选保持未知交给校验层列候选。
+      const closeId = resolveCloseIconId(id)
+      if (closeId !== null) {
+        const closeInner = getIconInner(closeId)
+        if (closeInner !== null) {
+          log.info('[page-writer] corrected unknown icon id to unique prefix match', {
+            from: id,
+            to: closeId
+          })
+          $el.attr('data-icon', closeId)
+          $el.attr('viewBox', viewBox)
+          const trustedSvg = cheerio.load(`<svg ${strokeAttrs}></svg>`, {
+            scriptingEnabled: false
+          })('svg')
+          for (const [name, value] of Object.entries(trustedSvg.attr() || {})) {
+            $el.attr(name, value)
+          }
+          $el.html(closeInner)
+          $el.removeAttr('data-icon')
+          return
+        }
+      }
       if (!unknownIds.includes(id)) unknownIds.push(id)
       return
     }

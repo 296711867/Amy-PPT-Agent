@@ -12,6 +12,12 @@ export type LayoutFillContent = {
   metrics?: string[]
   listItems?: string[]
   media?: Array<{ src: string }>
+  /**
+   * 按 slotId 定向填文本（I-10）：kicker/subtitle/footer 这类语义槽没有独立的
+   * 内容包字段，靠 kind 推导会漏填，骨架示例文案（"副标题：一句话…"）就会
+   * 原样落盘。值会被截断到该槽的 maxChars。
+   */
+  slotText?: Record<string, string>
 }
 
 import type { OutlineItemEntry } from '@shared/generation'
@@ -147,6 +153,14 @@ export function fillLayoutAsset(
   assign('body', [content.body].filter(Boolean) as string[])
   assign('label', content.labels)
   assign('metric', content.metrics)
+  // slotId 定向值优先于 kind 推导，并按槽位字符预算截断
+  for (const slot of asset.slots) {
+    if (slot.kind === 'title' || slot.kind === 'body' || slot.kind === 'list' || slot.kind === 'media') continue
+    const directed = content.slotText?.[slot.slotId]?.trim()
+    if (directed) {
+      textAssignments.set(slot.slotId, directed.slice(0, Math.max(2, slot.maxChars)))
+    }
+  }
   for (const [slotId, value] of textAssignments) {
     html = replaceBlockInner(html, slotId, value)
   }
