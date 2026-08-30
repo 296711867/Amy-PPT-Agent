@@ -112,6 +112,14 @@ export function StylesPage(): React.JSX.Element {
       ),
     [filteredStyles]
   )
+  const builtinStyleCount = useMemo(
+    () => styles.filter((style) => style.source === 'builtin').length,
+    [styles]
+  )
+  const customStyleCount = useMemo(
+    () => styles.filter((style) => style.source === 'custom' || style.source === 'override').length,
+    [styles]
+  )
   const { visibleIds: visibleFallbackIds, setItemRef } = useVisibleItemIds(
     fallbackStyleIds,
     MAX_VISIBLE_IFRAMES
@@ -301,7 +309,16 @@ export function StylesPage(): React.JSX.Element {
                     <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-75" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[280px]">
+                <DropdownMenuContent align="end" className="w-[300px]">
+                  <DropdownMenuItem onSelect={() => navigate('/styles/new')}>
+                    <Sparkles className="h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{t('styles.importParse')}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {t('styles.importParseTooltip')}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={Boolean(importingPackageType)}
                     onSelect={() => void handleImportPackage('zip')}
@@ -359,7 +376,12 @@ export function StylesPage(): React.JSX.Element {
               </Tooltip>
             </div>
           </div>
-          <p className="mt-2 text-[12px] text-muted-foreground">{t('styles.description')}</p>
+          <p className="mt-2 text-[12px] leading-5 text-muted-foreground">
+            {t('styles.description', {
+              builtin: builtinStyleCount,
+              custom: customStyleCount
+            })}
+          </p>
         </div>
 
         <div className="mb-5 rounded-lg border border-border bg-card/75 p-3">

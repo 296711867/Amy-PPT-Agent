@@ -731,12 +731,17 @@ export const en = {
     eyebrow: 'Style Lab',
     title: 'Style management',
     description:
-      'Built-in 70+ styles. Import PPTX, HTML, images, and more to auto-extract styles, or create your own from scratch.',
+      '{builtin} built-in styles · {custom} of mine. The selected style drives the palette, typography, and layout of the whole deck. Create styles by AI-parsing PPTX / HTML / Markdown / images, hand-writing from the structured template, or importing style packages.',
     refresh: 'Refresh',
     newStyle: 'New style',
-    newStyleTooltip: 'Create a new custom style template',
+    newStyleTooltip:
+      'Hand-write from the structured template, or AI-parse PPTX / HTML / Markdown / images',
     importMenu: 'Import Style',
-    importMenuTooltip: 'Import a packaged style ZIP or a style folder.',
+    importMenuTooltip:
+      'AI-parse a file into a new style, or import a packaged style ZIP / folder (add or override).',
+    importParse: 'AI-parse a file',
+    importParseTooltip:
+      'Extract a style from PPTX / HTML / Markdown / images with AI (opens the new-style page)',
     officialSkillLabel: 'Amy-PPT style parsing skill',
     importPackage: 'Import Style ZIP',
     importPackageTooltip: 'Import a packaged style ZIP.',
@@ -843,36 +848,54 @@ export const en = {
     promptRef4:
       '## Layout: Specify alignment, information hierarchy, whitespace and density, e.g. "modular sections, centered or left-aligned, moderate density"',
     promptRef5:
-      '## Animation: Describe entrance animations, duration, easing, e.g. "fade-in or gentle slide-up, 0.4s–0.6s, ease-out"',
+      '## Animation: Describe entrance animations, duration, easing, e.g. "fade or fade-up, 0.4s–0.6s, ease-out" (only standard types: fade / fade-up / slide-up / zoom-in / pulse, etc.)',
     promptRef6:
       '## Use case: Define target audience and scenario, e.g. "business reports, product intros, project summaries — formal but not dull"',
     promptRef7:
       '## Avoid: List elements to avoid, e.g. "no high-saturation clashing colors, no heavy gradients and shadows"',
+    promptRef8:
+      '## Components and decoration: define one consistent icon treatment, chart colors, and decorative motifs, e.g. "line icons on a shared circular backing, charts in the primary palette with muted gridlines, decoration limited to thin dividers and geometric corner marks"',
+    promptRef9:
+      '## Animation must use standard types only (fade / fade-up / slide-up / zoom-in / pulse, etc.) — never invent animation names',
     emptyMarkdown: '_No Markdown content_',
     saveStyle: 'Save style',
     currentMode: 'Current mode: {mode}',
     builtinMode: 'Built-in (saving creates an override)',
-    template: `A clean, bright, light-toned style with a pure white or very light gray background and generous whitespace for an open, uncluttered reading experience.
+    template: `[One-line positioning] Open with a natural-language paragraph describing the overall mood and first impression, e.g. "a calm, restrained business blue with crisp hierarchy that reads as trustworthy at a glance". Everything in 【】 below is a placeholder: replace it with your style decisions, delete lines you do not need, but keep the section headings — the generator builds the deck's visual contract from these sections.
 
-## Colors
-Neutral grays as the primary palette, with a single brand accent color (e.g. blue #2563EB or green #16A34A) for titles and key elements. Background: pure white #FFFFFF. Text: dark gray #1F2937. Restrained yet professional.
+## Colors (concrete hex values are required; the deck palette is derived from this section)
+- Primary: [#2563EB — titles, key shapes, emphasis]
+- Background: [#F8FAFC — page base]
+- Body text: [#1E293B — keep enough contrast against the background]
+- Accent / support: [#F59E0B, #0EA5E9 — what each is used for]
+- Mood keywords: [professional, clear, trustworthy]
 
 ## Typography
-Titles use a clean sans-serif font in bold, dark gray or black. Body text uses regular-weight sans-serif at a comfortable size with line height above 1.6 for readability. Clear hierarchy through font size, weight, and color.
+- Titles: [bold sans-serif (e.g. Source Han Sans Heavy), dark, separated from body by weight and color]
+- Body: [regular-weight sans-serif, line height 1.6+, readable at projection distance]
+- Hierarchy: [via weight/color or size — keep one system deck-wide]
 
 ## Layout
-Clear modular structure, content centered or left-aligned. Hierarchy established through font size, color, and spacing. Generous whitespace, moderate information density per slide.
+- Title band: [conventional content slides share one left-aligned title band with a fixed title-to-content gap]
+- Modules: [flat zones and axes first; cards only for parallel, comparable content, with one consistent border/radius/fill system]
+- Density: [one focal visual + 2-3 support groups per slide; prefer trimming over stuffing]
 
-## Animation
-Calm and subtle rhythm. Elements fade in or gently slide up over 0.4s–0.6s with ease-out easing. Avoid flashy transitions.
+## Components and decoration
+- Icons: [line icons on one consistent circular backing, used in groups, not individually decorated]
+- Data and charts: [charts in the primary palette, muted gridlines, key numbers emphasized; table headers in primary-on-white]
+- Decorative motif: [1-2 restrained motifs (thin dividers, geometric corner marks) that serve content]
+
+## Animation (only standard types are allowed: fade / fade-up / slide-up / zoom-in / pulse, etc. — never invent names)
+- Entrance: [modules enter in reading order via fade-up, 0.4s–0.6s, ease-out]
+- Emphasis: [one pulse on the key number; no full-page flicker or large displacements]
 
 ## Suitable for
-Business presentations, product introductions, project summaries — formal but not stiff.
+[Audience and occasions, e.g. tech talks, product launches, teaching]
 
 ## Avoid
-- Do not use high-saturation colors
-- Do not stack heavy gradients and shadows
-- Do not create flickering or large-scale shaking animations`
+- [High-saturation colors, large-area gradients and shadows]
+- [Web-like components: buttons, pill walls, dashboard shells]
+- [Flickering or shaking animations that disturb presenting]`
   },
   generating: {
     stages: {
