@@ -45,7 +45,7 @@ import { createWorkflowTelemetry } from './workflow-telemetry'
 import { validateAssetIntegrity } from './asset-integrity'
 import { preflightSpecCheck } from './preflight-spec'
 import { generationBus } from './generation-events'
-import { diversifyUniversalLayoutSequence } from '@shared/universal-layouts'
+import { diversifyUniversalLayoutSequence, getUniversalLayoutImageCount } from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
 const pageSlugId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 10)
@@ -288,6 +288,7 @@ export async function executeDeckGeneration(
           userMessage: context.userMessage,
           sourceDocumentPaths: context.sourceDocumentPaths,
           visualElementPreferences: context.visualElementPreferences,
+          imagePolicy: context.imagePolicy,
           emit: (chunk) => emitDeckChunk(chunk),
           runId: context.runId,
           signal: context.abortSignal
@@ -511,6 +512,18 @@ export async function executeDeckGeneration(
     })
   }
   const tImages = telemetry.begin('page-images', { policy: context.imagePolicy })
+  const imageCandidateItems = outlineWithBackgrounds.filter(
+    (item, index) => !lockedAssignments[index] && getUniversalLayoutImageCount(item.layoutId) > 0
+  )
+  if (context.imagePolicy && imageCandidateItems.length === 0) {
+    // 用户要求配图但 planner 没给任何一页选带图片槽的 layoutId——占位/AI 配图
+    // 都只认 layoutId 图槽，这会导致"要图不给图"。打日志便于诊断规划质量。
+    log.warn('[generate:deck] image policy set but no planned layout carries image slots', {
+      sessionId: context.sessionId,
+      imagePolicy: context.imagePolicy,
+      totalPages: pageRefs.length
+    })
+  }
   const rawOutlineItems = await prepareDeckImageAssets({
     db,
     decryptApiKey: ctx.credentials.decryptApiKey,

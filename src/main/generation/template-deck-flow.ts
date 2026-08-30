@@ -252,6 +252,7 @@ export async function executeTemplateDeckGeneration(
           topic: context.topic,
           userMessage: context.userMessage,
           sourceDocumentPaths: context.sourceDocumentPaths,
+          imagePolicy: context.imagePolicy,
           emit: (chunk) => emitDeckChunk(chunk),
           runId: context.runId,
           signal: context.abortSignal

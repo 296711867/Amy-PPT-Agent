@@ -9,7 +9,7 @@ import {
   buildPlanningSystemPrompt,
   buildPlanningUserPrompt
 } from '../../agent-runtime/prompt'
-import type { GenerateChunkEvent, OutlineItem } from '@shared/generation'
+import type { GenerateChunkEvent, ImagePolicy, OutlineItem } from '@shared/generation'
 import { resolvePlannedVisualFormat } from '@shared/generation'
 import { normalizeLayoutIntent } from '@shared/layout-intent'
 import {
@@ -83,6 +83,7 @@ export const planDeckWithLLM = async (args: {
   sourceDocumentPaths?: string[]
   hasSourceMaterials?: boolean
   visualElementPreferences?: import('@shared/generation').VisualElementPreferences
+  imagePolicy?: ImagePolicy
   emit?: (chunk: GenerateChunkEvent) => void
   runId?: string
   signal?: AbortSignal
@@ -104,7 +105,8 @@ export const planDeckWithLLM = async (args: {
     totalPages: args.totalPages,
     userMessage: args.userMessage,
     hasSourceMaterials: args.hasSourceMaterials || Boolean(args.sourceDocumentPaths?.length),
-    visualElementPreferences: args.visualElementPreferences
+    visualElementPreferences: args.visualElementPreferences,
+    imagePolicy: args.imagePolicy
   })
   const parsePlanningItems = (responseText: string): OutlineItem[] => {
     const parsed = parseModelJson(responseText, args.appLocale)

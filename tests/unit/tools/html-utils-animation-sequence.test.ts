@@ -63,13 +63,15 @@ describe('validateHtmlContent declarative animation controls', () => {
     expect(result.errors.join('\n')).toContain('data-anim-click-group 必须在 click 动画的 DOM 顺序上连续出现')
   })
 
-  it('rejects data-anim values outside the public editable contract', () => {
+  it('rejects data-anim values outside the public editable contract and lists allowed values', () => {
     const result = validateHtmlContent(`
       <div data-anim="zoom">A</div>
       <div data-anim="glitch-in">B</div>
     `)
 
-    expect(result.errors.join('\n')).toContain('data-anim 仅支持当前公开可编辑动画类型')
+    // 错误信息会进入生成重试反馈，必须带全合法取值，模型才能自纠
+    // （实测 fade-in 只报"非法值"时模型重试仍写同一个值）。
+    expect(result.errors.join('\n')).toContain('data-anim 仅支持以下取值：fade/fade-up')
     expect(result.errors.join('\n')).toContain('zoom')
     expect(result.errors.join('\n')).toContain('glitch-in')
   })

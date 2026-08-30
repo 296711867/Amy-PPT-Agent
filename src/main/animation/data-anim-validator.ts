@@ -35,8 +35,10 @@ export function validateDataAnimContract(
       }
     })
     if (invalidAnimTypes.size > 0) {
+      // 必须把合法取值列全：这条错误会进入生成重试反馈，
+      // 只说"非法值"模型会反复写同一个猜出来的值（实测 fade-in 重试仍失败）。
       errors.push(
-        `data-anim 仅支持当前公开可编辑动画类型，非法值：${Array.from(invalidAnimTypes).join(', ')}`
+        `data-anim 仅支持以下取值：${DATA_ANIM_SUPPORTED_TYPES.join('/')}。非法值：${Array.from(invalidAnimTypes).join(', ')}（请改用列表中的类型，例如 fade-in 改为 fade 或 fade-up）`
       )
     }
 

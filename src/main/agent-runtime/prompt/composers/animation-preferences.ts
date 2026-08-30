@@ -1,4 +1,5 @@
 import type { AnimationPreferencesPayload } from '@shared/generation'
+import { DATA_ANIM_SUPPORTED_TYPES } from '@shared/element-animation'
 
 const PREFERENCE_LINES: Record<string, string> = {
   fade: '- Prefer data-anim="fade" for quiet text blocks, notes, and low-distraction entrances.',
@@ -50,6 +51,7 @@ export function formatAnimationPreferencesForPageWriting(
     '- Do not change slide outline, page count, slide titles, source facts, or content structure solely to satisfy animation.',
     '- Animation is downstream only: follow the already-decided page form, content enrichment, source grounding, and layout density. Never reduce, skip, or reshape warranted content enrichment to satisfy an animation preference.',
     '- Prefer subtle reading-order entrance animations.',
+    `- Hard contract: data-anim only accepts these exact values — ${DATA_ANIM_SUPPORTED_TYPES.join(', ')}. Never invent variants like fade-in or slide-in; when unsure use fade or fade-up.`,
     ...lines,
     '- Avoid runtime-only attributes and custom anime timelines in normal editable/exportable pages.'
   ].join('\n')
