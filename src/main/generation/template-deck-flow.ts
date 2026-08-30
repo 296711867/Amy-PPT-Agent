@@ -20,6 +20,7 @@ import {
 import { canUseSourcePlanDirectly, mapSourcePlanToOutlineItems } from './source-plan'
 import type { GenerationContext, RuntimeJobExecutionContext } from './context'
 import { prepareDeckImageAssets } from './deck-images'
+import { ensureImageSlotLayouts } from './image-slot-assignment'
 import {
   diversifyUniversalLayoutSequence,
   normalizeUniversalLayoutId
@@ -258,24 +259,28 @@ export async function executeTemplateDeckGeneration(
           signal: context.abortSignal
         })
 
-  const plannedOutline = diversifyUniversalLayoutSequence(
-    pageRefs.map((page, index) => {
-      const planned = plannedOutlineItems[index]
-      return {
-        title: planned?.title?.trim() || page.title,
-        contentOutline: planned?.contentOutline?.trim() || '',
-        layoutIntent: planned?.layoutIntent,
-        contentStructure: planned?.contentStructure,
-        moduleCount: planned?.moduleCount,
-        visualAspect: planned?.visualAspect,
-        contentDensity: planned?.contentDensity,
-        visualFormat: planned?.visualFormat,
-        audienceMove: planned?.audienceMove,
-        layoutId: planned?.layoutId,
-        imageAssetPath: planned?.imageAssetPath,
-        imageAssetPaths: planned?.imageAssetPaths
-      }
-    })
+  // diversify 之后补图槽（顺序原因见 deck-flow 同名注释，I-5）
+  const plannedOutline = ensureImageSlotLayouts(
+    diversifyUniversalLayoutSequence(
+      pageRefs.map((page, index) => {
+        const planned = plannedOutlineItems[index]
+        return {
+          title: planned?.title?.trim() || page.title,
+          contentOutline: planned?.contentOutline?.trim() || '',
+          layoutIntent: planned?.layoutIntent,
+          contentStructure: planned?.contentStructure,
+          moduleCount: planned?.moduleCount,
+          visualAspect: planned?.visualAspect,
+          contentDensity: planned?.contentDensity,
+          visualFormat: planned?.visualFormat,
+          audienceMove: planned?.audienceMove,
+          layoutId: planned?.layoutId,
+          imageAssetPath: planned?.imageAssetPath,
+          imageAssetPaths: planned?.imageAssetPaths
+        }
+      })
+    ),
+    context.imagePolicy
   )
   const outlineItems = await prepareDeckImageAssets({
     db,

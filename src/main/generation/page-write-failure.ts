@@ -13,7 +13,7 @@ export interface WriteToolStatusLikeChunk {
 // 工具状态事件发出前 label 会经 progressLabel 归一化：
 // 「验证失败/落盘校验失败/…」统一变成「已失败 / Failed」，
 // 因此除原始 label 外还必须匹配归一化后的失败 label。
-const WRITE_VALIDATION_FAILURE_LABEL_RE = /已失败|Failed|验证失败|校验失败/
+const WRITE_VALIDATION_FAILURE_LABEL_RE = /已失败|Failed|验证失败|校验失败|写入失败/
 
 // 写盘被拒的 detail 特征（字号/间距下限、模板骨架、远程资源、渲染/Deck 回滚、骨架缺失）。
 // 其他工具的失败状态（如动画配置失败）不应被并入「页面未写入」的上下文。
@@ -22,8 +22,8 @@ const WRITE_VALIDATION_DETAIL_RE =
 
 /**
  * 从写盘工具状态事件里识别「校验失败」类状态（验证失败 / 落盘校验失败 /
- * 模板骨架校验失败 / 外链资源校验失败 / 渲染质量校验失败 / Deck 一致性校验失败，
- * 含被 progressLabel 归一化成「已失败」的形式），
+ * 模板骨架校验失败 / 外链资源校验失败 / 渲染质量校验失败 / Deck 一致性校验失败
+ * / 写入失败（I-7 意外异常），含被 progressLabel 归一化成「已失败」的形式），
  * 返回应记录的失败摘要；与写盘校验无关的事件返回 null。
  */
 export function extractWriteValidationFailure(
@@ -33,6 +33,9 @@ export function extractWriteValidationFailure(
   const detail = (chunk.detail || '').trim()
   if (!label || !detail) return null
   if (!WRITE_VALIDATION_FAILURE_LABEL_RE.test(label)) return null
+  // 「写入失败」承载任意异常文本（fs/序列化等），detail 无固定特征，
+  // 直接放行，否则真实原因又会退化成「模型没有调用工具」。
+  if (/写入失败/.test(label)) return `${label}: ${detail}`
   if (!WRITE_VALIDATION_DETAIL_RE.test(detail)) return null
   return `${label}: ${detail}`
 }

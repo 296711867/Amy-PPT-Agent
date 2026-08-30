@@ -272,6 +272,25 @@ export function createPageWriteTools(args: {
             pageId: resolvedPageId
           })
         }
+      } else {
+        // I-7：意外异常（fs/序列化/构建壳层等）此前零日志，外层只能报
+        // 「模型没有成功调用写盘工具」，与事实相反且误导重试。必须记录
+        // 并把真实原因送进重试反馈链路。
+        log.error('[deepagent] page write failed unexpectedly', {
+          sessionId: context.sessionId,
+          pageId: resolvedPageId,
+          mode: context.mode || 'generate',
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack || '' : ''
+        })
+        emitNormalizedToolStatus(config, {
+          label: `写入失败 ${resolvedPageId}`,
+          detail:
+            (error instanceof Error ? error.message : String(error)) ||
+            'unknown write failure',
+          progress: 60,
+          pageId: resolvedPageId
+        })
       }
       throw error
     }

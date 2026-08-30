@@ -26,6 +26,7 @@ import {
   resolveSourceDocuments
 } from './context'
 import { canUseSourcePlanDirectly, mapSourcePlanToOutlineItems } from './source-plan'
+import { ensureImageSlotLayouts } from './image-slot-assignment'
 import { retireActiveSessionPagesForReplacement } from './session-page-replacement'
 import { prepareDeckImageAssets } from './deck-images'
 import { assignDeckBackgroundAssets, prepareDeckBackgroundAssets } from './deck-backgrounds'
@@ -36,6 +37,7 @@ import {
   ensurePageShell,
   fillLayoutAsset
 } from '../layout-assets/fill'
+import { applyContractPalette } from '../layout-assets/palette'
 import {
   ensureLayoutLibrary,
   readLayoutManifest,
@@ -403,32 +405,42 @@ export async function executeDeckGeneration(
     runId: context.runId,
     designContract
   })
-  const plannedOutline = diversifyUniversalLayoutSequence(
-    pageRefs.map((page, index) => {
-      const planned = plannedOutlineItems[index]
-      return {
-        title: planned?.title?.trim() || page.title,
-        contentOutline: planned?.contentOutline?.trim() || '',
-        layoutIntent: planned?.layoutIntent,
-        contentStructure: planned?.contentStructure,
-        moduleCount: planned?.moduleCount,
-        visualAspect: planned?.visualAspect,
-        contentDensity: planned?.contentDensity,
-        visualFormat: planned?.visualFormat,
-        audienceMove: planned?.audienceMove,
-        layoutId: planned?.layoutId
-      }
-    })
+  // 先 diversify 再补图槽：candidate 过滤按 intent/family 选布局，若先塞图槽
+  // layoutId 会被 diversify 换回纯文字布局。sourcePlan 路径不经过 LLM 规划器，
+ // 用户图片需求只有这里能兜底（I-5）。
+  const plannedOutline = ensureImageSlotLayouts(
+    diversifyUniversalLayoutSequence(
+      pageRefs.map((page, index) => {
+        const planned = plannedOutlineItems[index]
+        return {
+          title: planned?.title?.trim() || page.title,
+          contentOutline: planned?.contentOutline?.trim() || '',
+          layoutIntent: planned?.layoutIntent,
+          contentStructure: planned?.contentStructure,
+          moduleCount: planned?.moduleCount,
+          visualAspect: planned?.visualAspect,
+          contentDensity: planned?.contentDensity,
+          visualFormat: planned?.visualFormat,
+          audienceMove: planned?.audienceMove,
+          layoutId: planned?.layoutId
+        }
+      })
+    ),
+    context.imagePolicy
   )
   // 背景图生成与锁定版式分配并行：两者互不依赖，节省串行等待
+  // I-6：占位图模式下用户明确不生成图片——AI 背景图直接静默跳过，
+  // 否则"没有可用的生图模型"警告会让用户以为占位选择失效。
+  const backgroundImagesAllowed = context.imagePolicy === 'ai'
   const tBackgrounds = telemetry.begin('backgrounds', {
-    enabled: context.deckBackgroundPolicy.enabled
+    enabled: context.deckBackgroundPolicy.enabled && backgroundImagesAllowed
   })
   const tLocked = telemetry.begin('locked-layouts', {
     mode: context.generationMode
   })
   const [backgroundManifest, lockedAssignments] = await Promise.all([
-    prepareDeckBackgroundAssets({
+    backgroundImagesAllowed
+      ? prepareDeckBackgroundAssets({
       db,
       decryptApiKey: ctx.credentials.decryptApiKey,
       projectDir: context.projectDir,
@@ -481,7 +493,16 @@ export async function executeDeckGeneration(
                       )
           }
         })
-    }),
+      })
+      : (() => {
+          if (context.deckBackgroundPolicy.enabled) {
+            log.info(
+              '[generate:deck] skipping AI backgrounds for non-ai image policy (placeholder mode)',
+              { sessionId: context.sessionId, imagePolicy: context.imagePolicy }
+            )
+          }
+          return Promise.resolve(null)
+        })(),
     // 锁定版式模式：整 deck 分配版式资产；配不上的页自动回退自由创作。
     context.generationMode === 'locked'
       ? ensureLayoutLibrary()
@@ -819,6 +840,11 @@ export async function executeDeckGeneration(
         ...(metricValues.length > 0 ? { metrics: metricValues } : {})
       })
       filled = blankMetricSlots(assigned, filled)
+      // I-8：内置骨架自带硬编码配色，落盘前按 design contract 色板做
+      // 确定性等秩映射，避免锁定页与整套风格撞色。
+      if (designContract?.palette?.length) {
+        filled = applyContractPalette(filled, designContract.palette)
+      }
       await fs.promises.writeFile(page.htmlPath, filled, 'utf-8')
       // 记录版式绑定：后续控件面板可免 AI 重渲染
       lockedPageBindings.set(page.pageId, {

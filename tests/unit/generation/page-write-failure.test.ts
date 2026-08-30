@@ -48,6 +48,17 @@ describe('extractWriteValidationFailure', () => {
     }
   })
 
+  it('passes through unexpected write failures with arbitrary detail (I-7)', () => {
+    // 意外异常（fs/序列化等）detail 无固定特征词；此前捕获不到会导致重试
+    // 反馈退化为「模型没有成功调用写盘工具」，与事实相反。
+    expect(
+      extractWriteValidationFailure({
+        label: '写入失败 page-1',
+        detail: 'EACCES: permission denied, open \'page-1.html\''
+      })
+    ).toBe("写入失败 page-1: EACCES: permission denied, open 'page-1.html'")
+  })
+
   it('ignores non-write failures, unlabeled detail, and failures without detail', () => {
     expect(
       extractWriteValidationFailure({ label: '已失败', detail: '切换动画配置失败：参数不合法' })
