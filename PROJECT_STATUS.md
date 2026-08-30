@@ -3,7 +3,7 @@
 ## Current Release
 
 - Product: Amy-PPT
-- Development version: `1.0.4`
+- Development version: `1.0.5`
 - Published update manifest: `1.0.4`
 - Repository: `https://github.com/296711867/Amy-PPT-Agent`
 - Stack: Electron 39, React 19, TypeScript, LangChain/Deep Agents, libSQL/Drizzle, Vitest

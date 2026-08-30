@@ -1,5 +1,15 @@
 # Amy-PPT Changelog
 
+## 1.0.5 - 2026-08-30
+
+- Added per-profile subtitle and takeaway controls: a three-mode "slide subtitle" setting (on / off on content slides with cover and section pages kept / off everywhere, default content-off) plus the existing takeaway-line setting now defaults to off, both injected through the shared composition profile so generation, retries, edits, beautify, and style switches inherit them.
+- Rebuilt the style-management page: live built-in/custom counts replace the stale "70+" claim, the import menu gains an AI-parse entry routing to the new-style page, and the new-style template is now a structured scaffold (positioning line, required concrete hex colors, typography, title-band layout, components and charts, whitelist-constrained animation, use case, avoid) matching what the generation pipeline consumes.
+- Made render validation resilient: the hidden validation window stays warm across pages with bounded page loads (15s, active stop), timeouts are classified as environmental so timed-out-but-persisted pages degrade to a warning instead of failing whole decks, and cross-page quality rules now evaluate the pages that did render.
+- Fixed the locked-layout pipeline end to end: builtin skeletons now ship the page-contract shell (guard root + content wrapper, re-seeded via a version bump), legacy skeletons get an idempotent `ensurePageShell`, cloned list items stay inside the page root, locked pages are recolored onto the design-contract palette by luminance rank, semantic slots (kicker/subtitle/footer) are filled from the outline instead of shipping sample copy, and cover/ending pages no longer lock onto the primitive builtin skeletons — they return to LLM creative generation.
+- Made placeholder images actually appear: the outline planner now receives the image policy with the full image-slot layout catalog, source-plan decks (which bypass the planner) get deterministic rotating image-slot assignments, and placeholder mode silently skips AI background generation instead of warning about a missing image model.
+- Made model retries self-correcting: `data-anim` validation errors list the full allowed type whitelist, unknown icon ids are auto-corrected on unique kebab-prefix matches (`graduation` → `graduation-cap`) with fuzzy candidates otherwise, and unexpected write-tool exceptions are logged and surfaced into retry feedback instead of the misleading "the model never called the write tool".
+- Added a generation issue log (`docs/design/generation-issue-log.md`) recording eleven real-run defects with root causes, fixes, and verification; PROJECT_STATUS links it as the intake point for new real-run defects.
+
 ## Unreleased
 
 - Added a card-grid view to the thinking page-outline panel: list/grid toggle, 16:9 slide-style placeholder cards (three per row, panel auto-widens), and dialog-based per-page outline editing.

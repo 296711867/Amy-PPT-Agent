@@ -1,6 +1,6 @@
 {
   "name": "amy-ppt",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Amy-PPT - Agent-controlled AI presentation studio",
   "main": "./out/main/index.js",
   "author": "PAN",
