@@ -79,6 +79,16 @@
 - **修复**（本轮）：`LayoutFillContent` 新增 `slotText`（按 slotId 定向填文本、按槽位 maxChars 截断）；deck-flow 锁定填充传入 kicker=主题前缀（`小马宝莉：星光熠熠角色介绍` 取 `：` 前段）、subtitle=大纲第一个要点、footer=deck 标题。
 - **验证**：`tests/unit/layout-assets/fill.test.ts` directed slot text 用例。
 
+## I-11 锁定版式修复后，封面/结尾质量断崖式下降（"和之前差距很大"的直接原因）
+
+- **现象**：用户反馈生成效果大幅变差。核查 17:44 会话：封面/结尾是 1.7KB/1.4KB 的极简骨架页（对比 LLM 创作页 ~344KB），且骨架示例文案（"行业研究 · 2026"、"副标题：一句话说明…"）原样出货；内容页正常。
+- **根因（两层）**：
+  1. 会话开启了"锁定版式"开关，但 I-2 修复前锁定填充因缺壳 bug **从未真正生效**（全部静默回退 AI 自由创作）——用户此前看到的封面/结尾一直是 LLM 画的。I-2 修好后锁定真正接管封面/结尾，内置 cover/ending 骨架（示意级结构）撑不起这两页的设计要求，观感骤降。
+  2. 该次运行的应用主进程未重启，I-10（定向填 kicker/subtitle/footer）尚未生效，模板示例文案继续出货。
+- **修复**（本轮）：封面/结尾从锁定快速通道剔除（`filterCoverEndingLockedAssignments`：intent=cover 或末页 → 不锁定，交还 LLM 创作）；锁定的确定性价值保留给内容页。内置 cover/ending 骨格若要重回快速通道，需要先升级到设计完整的骨架。
+- **验证**：`tests/unit/generation/locked-assignment-guard.test.ts`。
+- **运维提示**：dev 模式下主进程改动需要重启应用才生效——本轮 15:35 的 I-9/I-10 修复在 17:44 的运行中仍未加载（日志中无 `corrected unknown icon id`、封面仍带示例文案）。
+
 ---
 
 ## 已知观测点（未立案，等真实运行数据）

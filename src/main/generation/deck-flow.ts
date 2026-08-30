@@ -27,6 +27,7 @@ import {
 } from './context'
 import { canUseSourcePlanDirectly, mapSourcePlanToOutlineItems } from './source-plan'
 import { ensureImageSlotLayouts } from './image-slot-assignment'
+import { filterCoverEndingLockedAssignments } from './locked-assignment-guard'
 import { retireActiveSessionPagesForReplacement } from './session-page-replacement'
 import { prepareDeckImageAssets } from './deck-images'
 import { assignDeckBackgroundAssets, prepareDeckBackgroundAssets } from './deck-backgrounds'
@@ -504,6 +505,8 @@ export async function executeDeckGeneration(
           return Promise.resolve(null)
         })(),
     // 锁定版式模式：整 deck 分配版式资产；配不上的页自动回退自由创作。
+    // 封面/结尾不参与锁定（I-11）：内置 cover/ending 骨架撑不起这两页的设计
+    // 要求，壳层修复前锁定从未生效（全回退 AI），修复后直接拉低整套观感。
     context.generationMode === 'locked'
       ? ensureLayoutLibrary()
           .then(() => readLayoutManifest())
@@ -514,6 +517,15 @@ export async function executeDeckGeneration(
                   slideSizeId: context.slideSize.id,
                   seed: context.runId
                 })
+          )
+          .then((assignments) =>
+            filterCoverEndingLockedAssignments(
+              assignments,
+              plannedOutline.map((item, index) => {
+                if (item.layoutIntent === 'cover') return 'cover'
+                return index === plannedOutline.length - 1 ? 'ending' : 'content'
+              })
+            )
           )
       : Promise.resolve([])
   ])
