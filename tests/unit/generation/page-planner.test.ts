@@ -31,6 +31,8 @@ describe('page planner', () => {
         title: 'Customer evidence',
         keyPoints: ['Retention improved', 'Support volume declined'],
         layoutIntent: 'data-focus',
+        visualFormat: 'chart',
+        audienceMove: 'sees isolated metrics -> understands customer outcomes',
         contentStructure: 'metric-grid',
         moduleCount: 99,
         visualAspect: 'landscape',
@@ -53,9 +55,13 @@ describe('page planner', () => {
     expect(result.title).toBe('Customer evidence')
     expect(result.contentOutline).toContain('Retention improved')
     expect(result.moduleCount).toBe(6)
+    expect(result.visualFormat).toBe('chart')
+    expect(result.audienceMove).toBe('sees isolated metrics → understands customer outcomes')
     const messages = invoke.mock.calls[0][0] as Array<{ content: string }>
     expect(messages[0].content).toContain('Source document context:')
     expect(messages[0].content).toContain('evidence.md')
+    expect(messages[0].content).toContain('assertion title')
+    expect(messages[0].content).toContain('visualFormat')
     expect(messages[1].content).toContain('Overview')
   })
 

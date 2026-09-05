@@ -220,6 +220,8 @@ CREATE TABLE IF NOT EXISTS generation_pages (
   title TEXT NOT NULL,
   content_outline TEXT,
   layout_intent TEXT,
+  visual_format TEXT,
+  audience_move TEXT,
   layout_id TEXT,
   image_asset_path TEXT,
   image_asset_paths TEXT,
@@ -983,6 +985,12 @@ const enforceGenerationSchema = async (client: LibSqlClient): Promise<void> => {
   }
   if (!columns.has('layout_intent')) {
     await client.execute('ALTER TABLE generation_pages ADD COLUMN layout_intent TEXT')
+  }
+  if (!columns.has('visual_format')) {
+    await client.execute('ALTER TABLE generation_pages ADD COLUMN visual_format TEXT')
+  }
+  if (!columns.has('audience_move')) {
+    await client.execute('ALTER TABLE generation_pages ADD COLUMN audience_move TEXT')
   }
   if (!columns.has('layout_id')) {
     await client.execute('ALTER TABLE generation_pages ADD COLUMN layout_id TEXT')

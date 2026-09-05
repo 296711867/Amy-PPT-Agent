@@ -512,6 +512,25 @@ export const HIDE_FOR_PPTX_BACKGROUND_SCRIPT = `
     }
   });
 
+  // Full-height edge-anchored images are slide backgrounds, not useful
+  // editable content. Keep them in this raster composite so fills and text
+  // above them retain their original DOM z-order in PowerPoint.
+  root.querySelectorAll('[data-pptx-extracted-image]').forEach((el) => {
+    const rect = el.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    const pageArea = rootRect.width * rootRect.height;
+    if (!pageArea || rect.width * rect.height < pageArea * 0.2) return;
+    const horizontalTolerance = 2;
+    const verticalTolerance = 2;
+    const spansHeight = rect.height >= rootRect.height - verticalTolerance;
+    if (!spansHeight) return;
+    const touchesHorizontalEdge = rect.left <= rootRect.left + horizontalTolerance || rect.right >= rootRect.right - horizontalTolerance;
+    const touchesVerticalEdge = rect.top <= rootRect.top + verticalTolerance || rect.bottom >= rootRect.bottom - verticalTolerance;
+    if (touchesHorizontalEdge && touchesVerticalEdge) {
+      el.setAttribute('data-pptx-static-background-image', '1');
+    }
+  });
+
   // 2. Remove previous style
   const existing = document.getElementById('amy-ppt-pptx-hide-elements');
   if (existing) existing.remove();
@@ -539,7 +558,7 @@ export const HIDE_FOR_PPTX_BACKGROUND_SCRIPT = `
   style.textContent = [
     // Precisely hide extracted shapes (background/border) and images (visibility)
     '[data-pptx-extracted-shape]:not([data-pptx-static-background]) { background-color: transparent !important; border-color: transparent !important; }',
-    '[data-pptx-extracted-image] { opacity: 0 !important; visibility: hidden !important; }',
+    '[data-pptx-extracted-image]:not([data-pptx-static-background-image]) { opacity: 0 !important; visibility: hidden !important; }',
     // Keep unmapped images, shadows and complex containers in the raster background.
     // Their extraction can fail because of data limits, filters or cross-origin assets.
     // Only hide text whose source element was confirmed extracted. Hiding all DOM
@@ -552,7 +571,7 @@ export const HIDE_FOR_PPTX_BACKGROUND_SCRIPT = `
     // Hide formula blocks (captured as block-level overlay images)
     '[data-pptx-formula-block] { opacity: 0 !important; visibility: hidden !important; }',
     // An SVG that could not be rasterized stays visible in the background.
-    'svg[data-pptx-extracted-image] text, svg[data-pptx-extracted-image] tspan { fill: transparent !important; stroke: transparent !important; }',
+    'svg[data-pptx-extracted-image]:not([data-pptx-static-background-image]) text, svg[data-pptx-extracted-image]:not([data-pptx-static-background-image]) tspan { fill: transparent !important; stroke: transparent !important; }',
     // Hide input/textarea text
     'input, textarea { color: transparent !important; -webkit-text-fill-color: transparent !important; }'
   ].join('\\n');

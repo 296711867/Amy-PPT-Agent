@@ -4,6 +4,8 @@ import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
 import { normalizeSession, normalizeMessage } from '../ipc/utils'
+import { parseSessionMetadata } from '../generation/metadata-parser'
+import type { SessionPageRecord } from '../db/database'
 import { getStyleDetail, hasStyleSkill } from '../styles/catalog'
 import type { IpcContext } from '../ipc/context'
 import { resolveModelConfigForTask } from '../config/model-config-utils'
@@ -30,8 +32,13 @@ import {
 import { warmSessionFirstPageThumbnails } from './session-thumbnail'
 import { createSessionMasterIfMissing } from './master-service'
 import { buildAiSessionStyleSnapshot, normalizeAiStyleSelection } from './ai-style'
-import { hasCompleteSessionPageCoverage, recoverUsableSessionPages } from './page-status-recovery'
+import {
+  hasCompleteSessionPageCoverage,
+  recoverUsableSessionPages,
+  shouldRecoverSessionPages
+} from './page-status-recovery'
 import { scopeModelRuntimeToSession } from '../agent-runtime/model'
+import { isUntouchedTemplateSeed } from '../templates/template-seed-fingerprint'
 
 const THINKING_ID_RE = /^[a-zA-Z0-9_-]{6,32}$/
 const THINKING_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
@@ -488,7 +495,9 @@ export function registerSessionHandlers(
     const fontSelection = normalizeFontSelection(record.fontSelection)
     const imagePolicy = normalizeImagePolicy(record.imagePolicy)
     const generationMode = normalizeGenerationMode(record.generationMode)
-    const visualElementPreferences = normalizeVisualElementPreferences(record.visualElementPreferences)
+    const visualElementPreferences = normalizeVisualElementPreferences(
+      record.visualElementPreferences
+    )
     const deckBackgroundPolicy = normalizeDeckBackgroundPolicy(record.deckBackgroundPolicy)
     const sourcePlan = normalizeSourcePlan(record.sourcePlan)
     const referenceDocumentPath =
@@ -839,14 +848,34 @@ export function registerSessionHandlers(
       inMemoryRun?.status === 'running' ||
       latestJob?.status === 'pending' ||
       latestJob?.status === 'active'
-    const recovered = hasActiveRun
-      ? { pages: sessionPages, recoveredPageIds: [] }
-      : await recoverUsableSessionPages({
+    // 模板会话的种子页指纹：HTML 与创建时一致的页面从未被生成改写，不能恢复。
+    const sessionMetaRecord = parseSessionMetadata(String(session.metadata ?? ''))
+    const seedFingerprints =
+      sessionMetaRecord.source === 'template' &&
+      sessionMetaRecord.templateSeedFingerprints &&
+      typeof sessionMetaRecord.templateSeedFingerprints === 'object'
+        ? (sessionMetaRecord.templateSeedFingerprints as Record<string, string>)
+        : null
+    const isUntouchedSeedPage = seedFingerprints
+      ? (page: SessionPageRecord, html: string): boolean => {
+          const fingerprint = seedFingerprints[page.file_slug]
+          if (!fingerprint) return false
+          return isUntouchedTemplateSeed(html, fingerprint)
+        }
+      : undefined
+    const recovered = shouldRecoverSessionPages({
+      hasActiveRun,
+      hasGenerationHistory: Boolean(latestRun || latestJob)
+    })
+      ? await recoverUsableSessionPages({
           db,
           sessionId,
           pages: sessionPages,
-          resolveHtmlPath: (page) => resolvePageHtmlPath(projectDir, page.file_slug, page.html_path)
+          resolveHtmlPath: (page) =>
+            resolvePageHtmlPath(projectDir, page.file_slug, page.html_path),
+          isUntouchedSeed: isUntouchedSeedPage
         })
+      : { pages: sessionPages, recoveredPageIds: [] }
     sessionPages = recovered.pages
     const expectedPageCount = Math.max(
       Number(session.page_count) || 0,

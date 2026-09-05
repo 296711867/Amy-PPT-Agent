@@ -26,7 +26,8 @@ import {
   parseVisualReviewVerdicts,
   partitionVisualReviewBatches,
   runVisualDeckReview,
-  sampleVisualReviewPages
+  sampleVisualReviewPages,
+  supportsVisualReviewInput
 } from '../../../src/main/generation/visual-review'
 import type { GenerateChunkEvent } from '../../../src/shared/generation'
 
@@ -52,6 +53,13 @@ describe('visual review rubric prompt', () => {
 })
 
 describe('visual review batching and sampling', () => {
+  it('skips known text-only Coding endpoints before rendering screenshots', () => {
+    expect(
+      supportsVisualReviewInput('https://open.bigmodel.cn/api/coding/paas/v4')
+    ).toBe(false)
+    expect(supportsVisualReviewInput('https://api.openai.com/v1')).toBe(true)
+  })
+
   it('partitions pages into batches of three with a remainder batch', () => {
     const items = [1, 2, 3, 4, 5, 6, 7]
     expect(partitionVisualReviewBatches(items)).toEqual([[1, 2, 3], [4, 5, 6], [7]])
@@ -190,6 +198,24 @@ describe('runVisualDeckReview orchestration', () => {
 
     const abortedChunks = await runReview({ signal: AbortSignal.abort() as AbortSignal })
     expect(abortedChunks).toHaveLength(0)
+    expect(fakeInvoke).not.toHaveBeenCalled()
+  })
+
+  it('does not capture screenshots for a known text-only Coding endpoint', async () => {
+    const capturePageImage = vi.fn(async () => 'aGk=')
+    const chunks = await runReview({
+      model: {
+        provider: 'zhipu',
+        apiKey: 'k',
+        model: 'GLM-5.2',
+        baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4'
+      },
+      capturePageImage
+    })
+    const details = chunks.map((chunk) => chunk.payload.detail).filter(Boolean) as string[]
+
+    expect(details.join('\n')).toContain('当前 Coding 接口仅接受文本输入')
+    expect(capturePageImage).not.toHaveBeenCalled()
     expect(fakeInvoke).not.toHaveBeenCalled()
   })
 })

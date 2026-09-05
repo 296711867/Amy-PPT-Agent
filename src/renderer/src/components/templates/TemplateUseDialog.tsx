@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  ChevronDown,
   CircleAlert,
   Eye,
   FileText,
   LayoutTemplate,
   Loader2,
   Pencil,
+  Settings2,
   Sparkles,
   X
 } from 'lucide-react'
@@ -27,8 +29,14 @@ import { useModelAction } from '@renderer/hooks/useModelAction'
 import { useT } from '@renderer/i18n'
 import { ipc, type TemplateListItem } from '@renderer/lib/ipc'
 import { useTemplateStore, useToastStore } from '@renderer/store'
-import type { ParsedDocumentPlanResult } from '@shared/generation'
+import {
+  normalizeAnimationPreferences,
+  type AnimationPreferenceId,
+  type ImagePolicy,
+  type ParsedDocumentPlanResult
+} from '@shared/generation'
 import ReactMarkdown from 'react-markdown'
+import { AnimationPreferenceChips } from '../session-create/AnimationPreferenceChips'
 import {
   buildSuggestionDraft,
   formatSourceOutlineBriefText,
@@ -99,6 +107,12 @@ export function TemplateUseDialog({
   const [applyPageCountSuggestion, setApplyPageCountSuggestion] = useState(false)
   const [applyBriefSuggestion, setApplyBriefSuggestion] = useState(false)
   const [creating, setCreating] = useState(false)
+  // 模板链路默认不额外配图：模板页基底就是视觉事实来源。
+  const [imagePolicy, setImagePolicy] = useState<ImagePolicy>('none')
+  const [selectedAnimationPreferenceIds, setSelectedAnimationPreferenceIds] = useState<
+    AnimationPreferenceId[]
+  >([])
+  const [optionsOpen, setOptionsOpen] = useState(false)
   const documentInputRef = useRef<HTMLInputElement | null>(null)
   const open = Boolean(template)
 
@@ -115,6 +129,9 @@ export function TemplateUseDialog({
     setSuggestionDraft(null)
     setAcceptedSourcePlan(undefined)
     setSuggestionDialogOpen(false)
+    setImagePolicy('none')
+    setSelectedAnimationPreferenceIds([])
+    setOptionsOpen(false)
   }, [template])
 
   const close = (): void => {
@@ -288,26 +305,33 @@ export function TemplateUseDialog({
     const safePageCount = resolvePageCount(pageCount, template.pageCount || 5)
     setCreating(true)
     try {
-      const sessionId = await createSessionFromTemplate({
-        templateId: template.id,
-        title: deckTitle,
-        modelConfigId: resolvedModelConfigId,
-        pageCount: safePageCount,
-        referenceDocumentPath: referenceDocumentPath || undefined,
-        sourcePlan: acceptedSourcePlan
-      })
       const initialPrompt = buildTemplateInitialPrompt({
         templateName: template.name,
         title: deckTitle,
         pageCount: safePageCount,
         brief: briefText
       })
+      const sessionId = await createSessionFromTemplate({
+        templateId: template.id,
+        title: deckTitle,
+        modelConfigId: resolvedModelConfigId,
+        pageCount: safePageCount,
+        referenceDocumentPath: referenceDocumentPath || undefined,
+        sourcePlan: acceptedSourcePlan,
+        // 大纲随会话创建持久化，重启/取消后生成页可从会话元数据恢复。
+        initialPrompt,
+        imagePolicy
+      })
       success(t('templates.sessionCreated'), {
         description: t('templates.sessionCreatedDescription')
       })
       onOpenChange(false)
       navigate(`/sessions/${sessionId}/template-generating`, {
-        state: { initialPrompt, modelConfigId: resolvedModelConfigId }
+        state: {
+          initialPrompt,
+          modelConfigId: resolvedModelConfigId,
+          animationPreferences: normalizeAnimationPreferences(selectedAnimationPreferenceIds)
+        }
       })
     } catch (err) {
       error(t('templates.createFailed'), {
@@ -544,6 +568,72 @@ export function TemplateUseDialog({
                 <span>{documentParseError}</span>
               </div>
             ) : null}
+            <div className="rounded-lg border border-border/70">
+              <button
+                type="button"
+                onClick={() => setOptionsOpen((prev) => !prev)}
+                className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Settings2 className="h-3.5 w-3.5" />
+                  {t('templates.generationOptions')}
+                </span>
+                <span className="flex items-center gap-2">
+                  {imagePolicy !== 'none' || selectedAnimationPreferenceIds.length > 0 ? (
+                    <span className="rounded-md bg-accent px-1.5 py-0.5 text-[10px] text-foreground">
+                      {t('templates.generationOptionsCustomized')}
+                    </span>
+                  ) : null}
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${optionsOpen ? 'rotate-180' : ''}`}
+                  />
+                </span>
+              </button>
+              {optionsOpen ? (
+                <div className="space-y-3 border-t border-border/70 px-3 py-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      {t('templates.imagePolicyLabel')}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(
+                        [
+                          ['none', 'templates.imagePolicyNone'],
+                          ['placeholder', 'templates.imagePolicyPlaceholder'],
+                          ['ai', 'templates.imagePolicyAi']
+                        ] as Array<[ImagePolicy, Parameters<typeof t>[0]]>
+                      ).map(([value, labelKey]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setImagePolicy(value)}
+                          className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                            imagePolicy === value
+                              ? 'bg-foreground text-background'
+                              : 'border border-border text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {t(labelKey)}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                      {t('templates.imagePolicyHint')}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      {t('home.animationPreferences')}
+                    </label>
+                    <AnimationPreferenceChips
+                      selectedIds={selectedAnimationPreferenceIds}
+                      onChange={setSelectedAnimationPreferenceIds}
+                      compact
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button

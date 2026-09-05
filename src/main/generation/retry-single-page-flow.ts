@@ -17,7 +17,7 @@ import {
   type RuntimeJobExecutionContext
 } from './context'
 import type { GenerationModelControl } from './context'
-import type { DesignContract } from '@shared/generation'
+import { normalizeVisualFormat, type DesignContract, type VisualFormat } from '@shared/generation'
 import type { ModelTimeoutProfile } from '@shared/model-timeout'
 import { normalizeLayoutIntent, type LayoutIntent } from '@shared/layout-intent'
 import { normalizeUniversalLayoutId, type UniversalLayoutId } from '@shared/universal-layouts'
@@ -33,6 +33,8 @@ export type RetrySinglePageContext = {
   title: string
   contentOutline: string
   layoutIntent: LayoutIntent
+  visualFormat?: VisualFormat
+  audienceMove?: string
   layoutId?: UniversalLayoutId
   imageAssetPath?: string
   imageAssetPaths?: string[]
@@ -103,6 +105,8 @@ export async function resolveRetrySinglePageContext(
   const title = sessionPage.title || pageSnapshot?.title || `Page ${pageNumber}`
   const contentOutline = pageSnapshot?.content_outline || title
   const layoutIntent = normalizeLayoutIntent(pageSnapshot?.layout_intent)
+  const visualFormat = normalizeVisualFormat(pageSnapshot?.visual_format)
+  const audienceMove = pageSnapshot?.audience_move || undefined
   const layoutId = normalizeUniversalLayoutId(pageSnapshot?.layout_id)
   const imageAssetPath = pageSnapshot?.image_asset_path || undefined
   const imageAssetPaths = pageSnapshot?.image_asset_paths || undefined
@@ -128,6 +132,8 @@ export async function resolveRetrySinglePageContext(
     title,
     contentOutline,
     layoutIntent,
+    visualFormat,
+    audienceMove,
     layoutId,
     imageAssetPath,
     imageAssetPaths,
@@ -228,6 +234,8 @@ export async function executeRetrySinglePageGeneration(
     title: context.title,
     contentOutline: context.contentOutline,
     layoutIntent: context.layoutIntent,
+    visualFormat: context.visualFormat,
+    audienceMove: context.audienceMove,
     layoutId: context.layoutId,
     imageAssetPath: context.imageAssetPath,
     imageAssetPaths: context.imageAssetPaths,
@@ -271,6 +279,8 @@ export async function executeRetrySinglePageGeneration(
           title: context.title,
           contentOutline: context.contentOutline,
           layoutIntent: context.layoutIntent,
+          visualFormat: context.visualFormat,
+          audienceMove: context.audienceMove,
           layoutId: context.layoutId,
           imageAssetPath: context.imageAssetPath,
           imageAssetPaths: context.imageAssetPaths
@@ -290,6 +300,8 @@ export async function executeRetrySinglePageGeneration(
           title: context.title,
           contentOutline: context.contentOutline,
           layoutIntent: context.layoutIntent,
+          visualFormat: context.visualFormat,
+          audienceMove: context.audienceMove,
           layoutId: context.layoutId,
           imageAssetPath: context.imageAssetPath,
           imageAssetPaths: context.imageAssetPaths

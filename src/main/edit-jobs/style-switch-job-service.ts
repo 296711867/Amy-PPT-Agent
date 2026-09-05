@@ -13,7 +13,7 @@ import { buildDesignContractWithLLM } from '../generation/agent-runner'
 import { ensureHistoryBaselineSafe, GitHistoryService } from '../history/git-history-service'
 import { JobCoordinator, sessionLockKey } from '../agent-runtime'
 import type { EditContext } from '../generation/types'
-import type { GenerateChunkEvent } from '@shared/generation'
+import { normalizeVisualFormat, type GenerateChunkEvent } from '@shared/generation'
 import { normalizeLayoutIntent } from '@shared/layout-intent'
 import { normalizeUniversalLayoutId } from '@shared/universal-layouts'
 import { runStyleSwitchPageFlow } from './style-switch-job-flow'
@@ -188,6 +188,8 @@ export class StyleSwitchJobService {
           layoutIntent: latest?.layout_intent
             ? normalizeLayoutIntent(latest.layout_intent)
             : undefined,
+          visualFormat: normalizeVisualFormat(latest?.visual_format),
+          audienceMove: latest?.audience_move || undefined,
           layoutId: normalizeUniversalLayoutId(latest?.layout_id),
           imageAssetPath: latest?.image_asset_path || undefined,
           imageAssetPaths: latest?.image_asset_paths || undefined,
@@ -231,6 +233,8 @@ export class StyleSwitchJobService {
           title: page.title,
           contentOutline: page.contentOutline,
           layoutIntent: page.layoutIntent,
+          visualFormat: page.visualFormat,
+          audienceMove: page.audienceMove,
           layoutId: page.layoutId,
           imageAssetPath: page.imageAssetPath,
           imageAssetPaths: page.imageAssetPaths,
@@ -686,6 +690,8 @@ export class StyleSwitchJobService {
         title: page.title,
         contentOutline: page.contentOutline,
         layoutIntent: page.layoutIntent,
+        visualFormat: page.visualFormat,
+        audienceMove: page.audienceMove,
         layoutId: page.layoutId,
         imageAssetPath: page.imageAssetPath,
         imageAssetPaths: page.imageAssetPaths,
@@ -756,6 +762,8 @@ export class StyleSwitchJobService {
         title: page.title,
         contentOutline: page.contentOutline,
         layoutIntent: page.layoutIntent,
+        visualFormat: page.visualFormat,
+        audienceMove: page.audienceMove,
         layoutId: page.layoutId,
         imageAssetPath: page.imageAssetPath,
         imageAssetPaths: page.imageAssetPaths,
@@ -871,6 +879,8 @@ export class StyleSwitchJobService {
           title: page.title,
           contentOutline: page.contentOutline,
           layoutIntent: page.layoutIntent,
+          visualFormat: page.visualFormat,
+          audienceMove: page.audienceMove,
           layoutId: page.layoutId,
           imageAssetPath: page.imageAssetPath,
           imageAssetPaths: page.imageAssetPaths,
@@ -1002,6 +1012,8 @@ export class StyleSwitchJobService {
             title: page.title,
             contentOutline: page.content_outline,
             layoutIntent: page.layout_intent,
+            visualFormat: page.visual_format,
+            audienceMove: page.audience_move,
             layoutId: page.layout_id,
             imageAssetPath: page.image_asset_path,
             imageAssetPaths: page.image_asset_paths,

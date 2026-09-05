@@ -16,6 +16,11 @@ describe('ensureImageSlotLayouts', () => {
     expect(ensureImageSlotLayouts(items)).toEqual(items)
   })
 
+  it("keeps text layouts under the 'none' policy (template decks keep their own visuals)", () => {
+    const items = textDeck(6)
+    expect(ensureImageSlotLayouts(items, 'none')).toEqual(items)
+  })
+
   it('keeps the deck unchanged when any content page already carries an image slot', () => {
     const items = textDeck(6)
     items[2] = { ...items[2], layoutId: 'image-left-two-cards' }

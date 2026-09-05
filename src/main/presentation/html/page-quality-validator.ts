@@ -245,7 +245,8 @@ function isLargeIconText($el: cheerio.Cheerio<AnyNode>): boolean {
  */
 export function validatePageQuality(
   html: string,
-  slideSize: SlideSizePreset
+  slideSize: SlideSizePreset,
+  options: { preserveTemplateLayout?: boolean } = {}
 ): QualityViolation[] {
   const violations: QualityViolation[] = []
   const $ = cheerio.load(html, { scriptingEnabled: false })
@@ -300,10 +301,21 @@ export function validatePageQuality(
     $roots = $('[data-page-scaffold] > *')
   }
   let rootsWithExplicitSafeArea = 0
+  let rootsRequiringSafeArea = 0
   $roots.each((_i, el) => {
     const $el = $(el)
     const cls = $el.attr('class') || ''
     const style = $el.attr('style') || ''
+    // Imported templates commonly use several absolutely positioned top-level
+    // blocks. Their x/width coordinates define the safe area; padding on each
+    // block is not a page gutter and must not be judged as one.
+    const usesAbsoluteTemplateCoordinates =
+      options.preserveTemplateLayout &&
+      /(?:^|;)\s*position\s*:\s*(?:absolute|fixed)\b/i.test(style)
+    if (usesAbsoluteTemplateCoordinates) {
+      return
+    }
+    rootsRequiringSafeArea += 1
     const px = resolveHorizontalPaddingPx(cls, style)
     if (px === null) return
     rootsWithExplicitSafeArea += 1
@@ -321,11 +333,11 @@ export function validatePageQuality(
     }
   })
 
-  if ($roots.length > 0 && rootsWithExplicitSafeArea === 0) {
+  if (rootsRequiringSafeArea > 0 && rootsWithExplicitSafeArea === 0) {
     violations.push({
       code: 'safe-area-implicit',
       severity: 'warn',
-      detail: `内容区的 ${$roots.length} 个根容器都没有显式水平 padding，无法静态确认文字是否位于安全区内`,
+      detail: `内容区的 ${rootsRequiringSafeArea} 个根容器都没有显式水平 padding，无法静态确认文字是否位于安全区内`,
       fix: `在承载正文的根容器上显式设置至少 px-${floorTw}（${floorPx}px）的水平 padding；只有全出血背景和装饰层可以贴边`
     })
   }

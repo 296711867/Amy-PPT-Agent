@@ -26,6 +26,10 @@ export interface SessionMetadata {
   fontSelection?: import('@shared/generation').FontSelection
   imagePolicy?: import('@shared/generation').ImagePolicy
   deckBackgroundPolicy?: import('@shared/generation').DeckBackgroundPolicy
+  // 模板链路：创建时持久化的初始大纲/指令，用于重启或取消后恢复生成入口。
+  templateInitialPrompt?: string
+  // 模板链路：种子页 HTML 指纹（pageId → sha1 前 12 位），恢复逻辑据此跳过未改写的种子页。
+  templateSeedFingerprints?: Record<string, string>
 }
 
 export function parseSessionMetadata(raw: string | undefined | null): SessionMetadata {

@@ -56,6 +56,8 @@ export type DeckGenerationArgs = {
     title: string
     contentOutline: string
     layoutIntent?: OutlineItem['layoutIntent']
+    visualFormat?: OutlineItem['visualFormat']
+    audienceMove?: OutlineItem['audienceMove']
     layoutId?: OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]
@@ -68,6 +70,8 @@ export type DeckGenerationArgs = {
     title: string
     contentOutline: string
     layoutIntent?: OutlineItem['layoutIntent']
+    visualFormat?: OutlineItem['visualFormat']
+    audienceMove?: OutlineItem['audienceMove']
     layoutId?: OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]

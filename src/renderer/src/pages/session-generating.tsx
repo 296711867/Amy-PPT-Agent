@@ -3,7 +3,11 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ipc } from '@renderer/lib/ipc'
 import type { AnimationPreferencesPayload, GenerateChunkEvent } from '@shared/generation.js'
 import type { GenerationFailureInfo } from '@shared/generation-error'
-import { getEditorGate, type EditorGate } from '../lib/sessionMetadata'
+import {
+  getEditorGate,
+  parseSessionMetadata,
+  type EditorGate
+} from '../lib/sessionMetadata'
 import { useLang, type Lang } from '../i18n'
 import {
   GenerationPreviewGrid,
@@ -454,7 +458,6 @@ export function SessionGeneratingPage({
     }
     let active = true
 
-    const initialPrompt = state?.initialPrompt?.trim() || NEUTRAL_GENERATION_PROMPT
     const explicitRerun = typeof state?.rerunToken === 'number'
     if (state?.retry || explicitRerun) {
       startedSessionRef.current = null
@@ -764,7 +767,7 @@ export function SessionGeneratingPage({
 
     const unsubscribe = ipc.onGenerateChunk((event) => applyChunk(event))
 
-    const startRun = async (): Promise<void> => {
+    const startRun = async (promptOverride?: string): Promise<void> => {
       const resolvedModelConfigId = await ensureModelActive(
         state?.modelConfigId || selectedModelConfigId
       )
@@ -778,12 +781,15 @@ export function SessionGeneratingPage({
       setPauseTechnicalDetail(null)
       setPendingPageCount(0)
       terminalStatusRef.current = null
+      // 路由 state 优先；重启/取消后从会话元数据恢复模板初始大纲。
+      const manualPrompt = (promptOverride ?? state?.initialPrompt ?? '').trim()
+      const runPrompt = manualPrompt || NEUTRAL_GENERATION_PROMPT
       if (import.meta.env.DEV) {
         console.info('[generate:start] request', {
           sessionId: id,
           generationKind,
           retry: Boolean(state?.retry),
-          hasInitialPrompt: Boolean(initialPrompt),
+          hasInitialPrompt: Boolean(manualPrompt),
           modelConfigId: resolvedModelConfigId
         })
       }
@@ -792,27 +798,29 @@ export function SessionGeneratingPage({
           ? ipc.startTemplateGenerate({
               sessionId: id,
               modelConfigId: resolvedModelConfigId,
-              userMessage: state.initialPrompt?.trim() || '',
+              userMessage: manualPrompt,
               type: 'deck',
-              retry: true
+              retry: true,
+              animationPreferences: state?.animationPreferences || undefined
             })
           : ipc.retryFailedPages({
               sessionId: id,
               modelConfigId: resolvedModelConfigId,
-              userMessage: state.initialPrompt?.trim() || undefined,
+              userMessage: manualPrompt || undefined,
               failedRunId: state.failedRunId
             })
         : generationKind === 'template'
           ? ipc.startTemplateGenerate({
               sessionId: id,
               modelConfigId: resolvedModelConfigId,
-              userMessage: initialPrompt,
-              type: 'deck'
+              userMessage: runPrompt,
+              type: 'deck',
+              animationPreferences: state?.animationPreferences || undefined
             })
           : ipc.startGenerate({
               sessionId: id,
               modelConfigId: resolvedModelConfigId,
-              userMessage: initialPrompt,
+              userMessage: runPrompt,
               type: 'deck',
               animationPreferences: state?.animationPreferences || undefined
             })
@@ -893,15 +901,26 @@ export function SessionGeneratingPage({
           )
         )
 
+        // 路由 state 没带大纲时（重启/取消后从会话列表重进），用创建时持久化的
+        // 模板初始大纲恢复手动开始意图，避免“没有生成入口”的死局。
+        const templateInitialPrompt =
+          generationKind === 'template'
+            ? parseSessionMetadata(snapshot.metadata).templateInitialPrompt?.trim() || ''
+            : ''
         const hasManualStartIntent = Boolean(
           state?.retry ||
-          explicitRerun ||
-          (state?.initialPrompt && state.initialPrompt.trim().length > 0)
+            explicitRerun ||
+            (state?.initialPrompt && state.initialPrompt.trim().length > 0) ||
+            templateInitialPrompt
         )
 
         if (fullyGenerated && !state?.retry && !explicitRerun && !runState?.hasActiveRun) {
-          navigate(`/sessions/${id}`, { replace: true })
-          return
+          // 用户带着初始大纲/指令进入时必须启动生成，即使页面快照看起来“已完成”
+          // （模板会话在首次生成前就带有已落盘的模板页）。
+          if (!hasManualStartIntent) {
+            navigate(`/sessions/${id}`, { replace: true })
+            return
+          }
         }
 
         if (runState) {
@@ -987,11 +1006,16 @@ export function SessionGeneratingPage({
           }
         }
 
-        if (fullyGenerated && !state?.retry && !explicitRerun) {
+        if (fullyGenerated && !state?.retry && !explicitRerun && !hasManualStartIntent) {
           navigate(`/sessions/${id}`, { replace: true })
           return
         }
-        if (currentStatus === 'completed' && !state?.retry && !explicitRerun) {
+        if (
+          currentStatus === 'completed' &&
+          !state?.retry &&
+          !explicitRerun &&
+          !hasManualStartIntent
+        ) {
           navigate(`/sessions/${id}`, { replace: true })
           return
         }
@@ -1022,7 +1046,7 @@ export function SessionGeneratingPage({
           appendEvent(t('generating.keptFailed'), new Date().toISOString())
           return
         }
-        void startRun()
+        void startRun(state?.initialPrompt?.trim() || templateInitialPrompt || undefined)
       })
       .catch(() => {
         void startRun()

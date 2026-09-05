@@ -95,4 +95,75 @@ describe('agent stream processor', () => {
     expect(result.finalAssistantText).toBe('before')
     expect(onModelThinking).not.toHaveBeenCalled()
   })
+
+  it('collects main-graph conversation messages and flags tool activity', async () => {
+    const result = await processAgentStreamCore(
+      chunks([
+        [[], 'updates', { messages: [{ id: 'a1', type: 'ai', content: '', tool_calls: [{ id: 'c1' }] }] }],
+        [
+          [],
+          'updates',
+          { tools: { update_single_page_file: 'ok' }, messages: [{ id: 't1', type: 'tool', tool_call_id: 'c1', content: 'done' }] }
+        ],
+        [[], 'updates', { messages: [{ id: 'a1', type: 'ai', content: '', tool_calls: [{ id: 'c1' }] }] }]
+      ]),
+      {
+        runId: 'run-3',
+        stage: 'rendering',
+        totalPages: 1,
+        provider: 'test',
+        model: 'test-model',
+        sessionId: 'session-3'
+      }
+    )
+
+    expect(result.sawToolCall).toBe(true)
+    expect(result.sawHumanMessage).toBe(false)
+    // 同 id 消息在多个 updates 分片重复出现时只保留一份
+    expect(result.conversationMessages).toHaveLength(2)
+  })
+
+  it('reports an empty turn as no tool calls and no human message in history', async () => {
+    const result = await processAgentStreamCore(
+      chunks([[[], 'updates', { model: true, messages: [{ id: 'a1', type: 'ai', content: '' }] }]]),
+      {
+        runId: 'run-4',
+        stage: 'rendering',
+        totalPages: 1,
+        provider: 'test',
+        model: 'test-model',
+        sessionId: 'session-4'
+      }
+    )
+
+    expect(result.finalAssistantText).toBe('')
+    expect(result.sawToolCall).toBe(false)
+    expect(result.sawHumanMessage).toBe(false)
+    expect(result.conversationMessages).toHaveLength(1)
+  })
+
+  it('ignores subagent subgraph updates when collecting conversation messages', async () => {
+    const result = await processAgentStreamCore(
+      chunks([
+        [
+          ['subagents:general-purpose'],
+          'updates',
+          { messages: [{ id: 'sub-1', type: 'ai', content: 'inner', tool_calls: [{ id: 'sub-c1' }] }] }
+        ],
+        [[], 'updates', { messages: [{ id: 'a1', type: 'ai', content: '' }] }]
+      ]),
+      {
+        runId: 'run-5',
+        stage: 'rendering',
+        totalPages: 1,
+        provider: 'test',
+        model: 'test-model',
+        sessionId: 'session-5'
+      }
+    )
+
+    expect(result.sawToolCall).toBe(false)
+    expect(result.conversationMessages).toHaveLength(1)
+    expect((result.conversationMessages[0] as { id?: string }).id).toBe('a1')
+  })
 })

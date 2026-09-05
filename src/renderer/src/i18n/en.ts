@@ -122,6 +122,14 @@ export const en = {
     useDialogTitle: 'Create session from template',
     useDialogDescription:
       'Enter a content direction or upload a document outline. Generation uses the source document and keeps the template visuals.',
+    generationOptions: 'Generation options',
+    generationOptionsCustomized: 'Customized',
+    imagePolicyLabel: 'Visuals',
+    imagePolicyNone: 'Keep template visuals',
+    imagePolicyPlaceholder: 'Placeholders',
+    imagePolicyAi: 'AI images',
+    imagePolicyHint:
+      'By default no extra visuals are added and template imagery stays untouched. Placeholders or AI images are injected for new content pages only when selected.',
     sessionTitleLabel: 'Session title',
     briefLabel: 'Brief / outline',
     parsed: 'Parsed',

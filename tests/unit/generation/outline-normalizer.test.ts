@@ -42,5 +42,6 @@ describe('outline normalizer', () => {
     expect(normalizeAudienceMove('a'.repeat(300))).toHaveLength(160)
     expect(normalizeAudienceMove('')).toBeUndefined()
     expect(normalizeAudienceMove(42)).toBeUndefined()
+    expect(normalizeAudienceMove('before -> after')).toBe('before → after')
   })
 })

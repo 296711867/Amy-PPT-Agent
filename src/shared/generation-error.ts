@@ -4,7 +4,6 @@ export type GenerationFailureCode =
   | 'MODEL_QUOTA'
   | 'MODEL_RATE_LIMIT'
   | 'MODEL_TIMEOUT'
-  | 'MODEL_TIMEOUT'
   | 'MODEL_CONNECTION'
   | 'PAGE_VALIDATION'
   | 'PAGE_WRITE'

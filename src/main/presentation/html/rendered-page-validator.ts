@@ -68,6 +68,9 @@ const VALIDATION_TIMEOUT_MS = 25_000
 const PAGE_LOAD_TIMEOUT_MS = 15_000
 const VALIDATION_TIMEOUT_ATTEMPTS = 2
 const MASTER_STYLE_TIMEOUT_MS = 5_000
+const RENDER_TIMEOUT_COOLDOWN_MS = 60 * 60_000
+let renderTimeoutCooldownUntil = 0
+let renderTimeoutCooldownReason = ''
 const intersection = (a: RenderedRect, b: RenderedRect): RenderedRect => {
   const x = Math.max(a.x, b.x)
   const y = Math.max(a.y, b.y)
@@ -575,7 +578,28 @@ export function inspectRenderedPresentationPage(args: {
   targetPath: string
   slideSize: SlideSizePreset
 }): Promise<RenderedPageInspectionResult> {
-  const run = validationQueue.then(() => inspectRenderedPage(args))
+  const run = validationQueue.then(async () => {
+    if (Date.now() < renderTimeoutCooldownUntil) {
+      const unavailableReason = `render validation cooldown after ${renderTimeoutCooldownReason}`
+      log.warn('[deepagent] rendered page validation skipped during timeout cooldown', {
+        pageId: args.pageId,
+        targetPath: args.targetPath,
+        cooldownUntil: renderTimeoutCooldownUntil,
+        unavailableReason
+      })
+      return { available: false as const, unavailableReason }
+    }
+
+    const result = await inspectRenderedPage(args)
+    if (!result.available && result.unavailableReason.includes('render validation timeout')) {
+      renderTimeoutCooldownUntil = Date.now() + RENDER_TIMEOUT_COOLDOWN_MS
+      renderTimeoutCooldownReason = result.unavailableReason
+    } else if (result.available) {
+      renderTimeoutCooldownUntil = 0
+      renderTimeoutCooldownReason = ''
+    }
+    return result
+  })
   validationQueue = run.then(
     () => undefined,
     () => undefined

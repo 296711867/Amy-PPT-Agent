@@ -48,7 +48,10 @@ import { createWorkflowTelemetry } from './workflow-telemetry'
 import { validateAssetIntegrity } from './asset-integrity'
 import { preflightSpecCheck } from './preflight-spec'
 import { generationBus } from './generation-events'
-import { diversifyUniversalLayoutSequence, getUniversalLayoutImageCount } from '@shared/universal-layouts'
+import {
+  diversifyUniversalLayoutSequence,
+  getUniversalLayoutImageCount
+} from '@shared/universal-layouts'
 import { mergeSessionMetadata } from './metadata-parser'
 
 const pageSlugId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 10)
@@ -263,7 +266,10 @@ export async function executeDeckGeneration(
     })
   })
   const tScaffold = telemetry.begin('page-scaffold', { pages: pageRefs.length })
-  scaffoldPromise.then(() => tScaffold.finish(true), () => tScaffold.finish(false))
+  scaffoldPromise.then(
+    () => tScaffold.finish(true),
+    () => tScaffold.finish(false)
+  )
 
   const shouldUseSourcePlan = canUseSourcePlanDirectly({
     sourcePlan: context.sourcePlan,
@@ -331,40 +337,40 @@ export async function executeDeckGeneration(
   // 设计契约不再人为延迟：与规划并行，尽早解锁后续步骤。
   const tDesign = telemetry.begin('design-contract')
   const designContractPromise = buildDesignContractWithLLM({
-      provider: context.provider,
-      apiKey: context.apiKey,
-      model: context.model,
-      baseUrl: context.providerBaseUrl,
-      maxTokens: context.maxTokens,
-      modelRuntime: context.modelRuntime,
-      modelControl: context.modelControl,
-      modelTimeoutMs: context.modelTimeouts.design,
-      temperature: DESIGN_CONTRACT_TEMPERATURE,
-      styleId: context.styleId,
-      styleSkillPrompt: context.styleSkill.prompt,
-      layoutRulesPrompt: context.layoutRulesPrompt,
-      styleKey: context.styleKey,
-      styleName: context.styleName,
-      styleVersion: context.styleVersion,
-      appLocale: context.appLocale,
-      totalPages: context.totalPages,
-      slideSize: context.slideSize,
-      topic: context.topic,
-      userMessage: context.userMessage,
-      fontSelection: context.fontSelection,
-      emit: (chunk) => emitDeckChunk(chunk),
-      runId: context.runId,
-      signal: context.abortSignal
-    }).then(
-      (result) => {
-        tDesign.finish(true)
-        return result
-      },
-      (error) => {
-        tDesign.finish(false)
-        throw error
-      }
-    )
+    provider: context.provider,
+    apiKey: context.apiKey,
+    model: context.model,
+    baseUrl: context.providerBaseUrl,
+    maxTokens: context.maxTokens,
+    modelRuntime: context.modelRuntime,
+    modelControl: context.modelControl,
+    modelTimeoutMs: context.modelTimeouts.design,
+    temperature: DESIGN_CONTRACT_TEMPERATURE,
+    styleId: context.styleId,
+    styleSkillPrompt: context.styleSkill.prompt,
+    layoutRulesPrompt: context.layoutRulesPrompt,
+    styleKey: context.styleKey,
+    styleName: context.styleName,
+    styleVersion: context.styleVersion,
+    appLocale: context.appLocale,
+    totalPages: context.totalPages,
+    slideSize: context.slideSize,
+    topic: context.topic,
+    userMessage: context.userMessage,
+    fontSelection: context.fontSelection,
+    emit: (chunk) => emitDeckChunk(chunk),
+    runId: context.runId,
+    signal: context.abortSignal
+  }).then(
+    (result) => {
+      tDesign.finish(true)
+      return result
+    },
+    (error) => {
+      tDesign.finish(false)
+      throw error
+    }
+  )
   const [plannedOutlineItems, designContract] = await Promise.all([
     plannerPromise,
     designContractPromise,
@@ -380,26 +386,30 @@ export async function executeDeckGeneration(
     usedSourcePlan: shouldUseSourcePlan
   })
   // 会话事件日志：记录规划决策
-  await db.appendSessionEvent({
-    sessionId: context.sessionId,
-    runId: context.runId,
-    eventType: 'planning/completed',
-    payload: {
-      totalPages: pageRefs.length,
-      usedSourcePlan: shouldUseSourcePlan,
-      outlineTitles: plannedOutlineItems.slice(0, 20).map((item) => item.title)
-    }
-  }).catch(() => undefined)
+  await db
+    .appendSessionEvent({
+      sessionId: context.sessionId,
+      runId: context.runId,
+      eventType: 'planning/completed',
+      payload: {
+        totalPages: pageRefs.length,
+        usedSourcePlan: shouldUseSourcePlan,
+        outlineTitles: plannedOutlineItems.slice(0, 20).map((item) => item.title)
+      }
+    })
+    .catch(() => undefined)
   // 会话事件日志：记录设计契约
-  await db.appendSessionEvent({
-    sessionId: context.sessionId,
-    runId: context.runId,
-    eventType: 'design-contract/set',
-    payload: {
-      theme: designContract.theme,
-      background: designContract.background?.slice(0, 100)
-    }
-  }).catch(() => undefined)
+  await db
+    .appendSessionEvent({
+      sessionId: context.sessionId,
+      runId: context.runId,
+      eventType: 'design-contract/set',
+      payload: {
+        theme: designContract.theme,
+        background: designContract.background?.slice(0, 100)
+      }
+    })
+    .catch(() => undefined)
   // 事件总线：设计契约完成 → 插件可注入额外视觉方向
   await generationBus.emit('generate:after-design', {
     sessionId: context.sessionId,
@@ -408,7 +418,7 @@ export async function executeDeckGeneration(
   })
   // 先 diversify 再补图槽：candidate 过滤按 intent/family 选布局，若先塞图槽
   // layoutId 会被 diversify 换回纯文字布局。sourcePlan 路径不经过 LLM 规划器，
- // 用户图片需求只有这里能兜底（I-5）。
+  // 用户图片需求只有这里能兜底（I-5）。
   const plannedOutline = ensureImageSlotLayouts(
     diversifyUniversalLayoutSequence(
       pageRefs.map((page, index) => {
@@ -442,59 +452,59 @@ export async function executeDeckGeneration(
   const [backgroundManifest, lockedAssignments] = await Promise.all([
     backgroundImagesAllowed
       ? prepareDeckBackgroundAssets({
-      db,
-      decryptApiKey: ctx.credentials.decryptApiKey,
-      projectDir: context.projectDir,
-      policy: context.deckBackgroundPolicy,
-      pageCount: plannedOutline.length,
-      slideSize: context.slideSize,
-      topic: context.topic,
-      stylePrompt: context.styleSkill.prompt,
-      provider: context.provider,
-      apiKey: context.apiKey,
-      model: context.model,
-      baseUrl: context.providerBaseUrl,
-      maxTokens: context.maxTokens,
-      modelControl: context.modelControl,
-      modelRuntime: context.modelRuntime,
-      signal: context.abortSignal,
-      onStatus: ({ state, current, total, role, whitespace, detail }) =>
-        emitDeckChunk({
-          type: 'llm_status',
-          payload: {
-            runId: context.runId,
-            stage: 'preflight',
-            label: uiText(context.appLocale, '生成 PPT 背景图', 'Generating PPT backgrounds'),
-            progress: 9,
-            totalPages: pageRefs.length,
-            detail:
-              state === 'planning'
-                ? uiText(
-                    context.appLocale,
-                    `正在根据主题和风格规划 ${total} 张背景图提示词`,
-                    `Planning prompts for ${total} theme-aware backgrounds`
-                  )
-                : state === 'generating'
-                  ? uiText(
-                      context.appLocale,
-                      `正在生成第 ${current}/${total} 张背景图（${role || ''} · ${whitespace || ''}）`,
-                      `Generating background ${current}/${total} (${role || ''} · ${whitespace || ''})`
-                    )
-                  : state === 'failed'
-                    ? detail ||
-                      uiText(
+          db,
+          decryptApiKey: ctx.credentials.decryptApiKey,
+          projectDir: context.projectDir,
+          policy: context.deckBackgroundPolicy,
+          pageCount: plannedOutline.length,
+          slideSize: context.slideSize,
+          topic: context.topic,
+          stylePrompt: context.styleSkill.prompt,
+          provider: context.provider,
+          apiKey: context.apiKey,
+          model: context.model,
+          baseUrl: context.providerBaseUrl,
+          maxTokens: context.maxTokens,
+          modelControl: context.modelControl,
+          modelRuntime: context.modelRuntime,
+          signal: context.abortSignal,
+          onStatus: ({ state, current, total, role, whitespace, detail }) =>
+            emitDeckChunk({
+              type: 'llm_status',
+              payload: {
+                runId: context.runId,
+                stage: 'preflight',
+                label: uiText(context.appLocale, '生成 PPT 背景图', 'Generating PPT backgrounds'),
+                progress: 9,
+                totalPages: pageRefs.length,
+                detail:
+                  state === 'planning'
+                    ? uiText(
                         context.appLocale,
-                        '背景图生成失败，已跳过，演示生成将继续',
-                        'Background generation failed and was skipped; the deck will continue'
+                        `正在根据主题和风格规划 ${total} 张背景图提示词`,
+                        `Planning prompts for ${total} theme-aware backgrounds`
                       )
-                    : uiText(
-                        context.appLocale,
-                        `第 ${current}/${total} 张背景图已完成`,
-                        `Background ${current}/${total} completed`
-                      )
-          }
+                    : state === 'generating'
+                      ? uiText(
+                          context.appLocale,
+                          `正在生成第 ${current}/${total} 张背景图（${role || ''} · ${whitespace || ''}）`,
+                          `Generating background ${current}/${total} (${role || ''} · ${whitespace || ''})`
+                        )
+                      : state === 'failed'
+                        ? detail ||
+                          uiText(
+                            context.appLocale,
+                            '背景图生成失败，已跳过，演示生成将继续',
+                            'Background generation failed and was skipped; the deck will continue'
+                          )
+                        : uiText(
+                            context.appLocale,
+                            `第 ${current}/${total} 张背景图已完成`,
+                            `Background ${current}/${total} completed`
+                          )
+              }
+            })
         })
-      })
       : (() => {
           if (context.deckBackgroundPolicy.enabled) {
             log.info(
@@ -533,9 +543,7 @@ export async function executeDeckGeneration(
   tLocked.finish(true, { lockedPages: lockedAssignments.filter(Boolean).length })
   const outlineWithBackgrounds = assignDeckBackgroundAssets(plannedOutline, backgroundManifest)
   const lockedPageIds = new Set(
-    pageRefs
-      .filter((_page, index) => Boolean(lockedAssignments[index]))
-      .map((page) => page.pageId)
+    pageRefs.filter((_page, index) => Boolean(lockedAssignments[index])).map((page) => page.pageId)
   )
   if (lockedPageIds.size > 0) {
     log.info('[generate:deck] locked layout mode assigned', {
@@ -548,7 +556,7 @@ export async function executeDeckGeneration(
   const imageCandidateItems = outlineWithBackgrounds.filter(
     (item, index) => !lockedAssignments[index] && getUniversalLayoutImageCount(item.layoutId) > 0
   )
-  if (context.imagePolicy && imageCandidateItems.length === 0) {
+  if (context.imagePolicy && context.imagePolicy !== 'none' && imageCandidateItems.length === 0) {
     // 用户要求配图但 planner 没给任何一页选带图片槽的 layoutId——占位/AI 配图
     // 都只认 layoutId 图槽，这会导致"要图不给图"。打日志便于诊断规划质量。
     log.warn('[generate:deck] image policy set but no planned layout carries image slots', {
@@ -625,6 +633,8 @@ export async function executeDeckGeneration(
       title: page.title,
       contentOutline: outlineItems[page.pageNumber - 1]?.contentOutline || '',
       layoutIntent: outlineItems[page.pageNumber - 1]?.layoutIntent,
+      visualFormat: outlineItems[page.pageNumber - 1]?.visualFormat,
+      audienceMove: outlineItems[page.pageNumber - 1]?.audienceMove,
       layoutId: outlineItems[page.pageNumber - 1]?.layoutId,
       imageAssetPath: outlineItems[page.pageNumber - 1]?.imageAssetPath,
       imageAssetPaths: outlineItems[page.pageNumber - 1]?.imageAssetPaths,
@@ -706,12 +716,15 @@ export async function executeDeckGeneration(
     }
   >()
   const persistGenerationSnapshotMetadata = async (): Promise<void> => {
-    await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
-      lastRunId: context.runId,
-      entryMode: 'multi_page',
-      indexPath,
-      projectId: context.projectId
-    }))
+    await db.updateSessionMetadata(
+      context.sessionId,
+      buildSessionMetadata({
+        lastRunId: context.runId,
+        entryMode: 'multi_page',
+        indexPath,
+        projectId: context.projectId
+      })
+    )
   }
   const persistCompletedGeneratedPage = async (page: {
     pageNumber: number
@@ -719,6 +732,8 @@ export async function executeDeckGeneration(
     title: string
     contentOutline: string
     layoutIntent?: LayoutIntent
+    visualFormat?: import('@shared/generation').OutlineItem['visualFormat']
+    audienceMove?: import('@shared/generation').OutlineItem['audienceMove']
     layoutId?: import('@shared/generation').OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]
@@ -740,6 +755,8 @@ export async function executeDeckGeneration(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -780,6 +797,8 @@ export async function executeDeckGeneration(
     title: string
     contentOutline: string
     layoutIntent?: LayoutIntent
+    visualFormat?: import('@shared/generation').OutlineItem['visualFormat']
+    audienceMove?: import('@shared/generation').OutlineItem['audienceMove']
     layoutId?: import('@shared/generation').OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]
@@ -794,6 +813,8 @@ export async function executeDeckGeneration(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -813,11 +834,14 @@ export async function executeDeckGeneration(
   // 锁定版式页：读骨架 → 确定性填充 → 落盘并按完成页记录（不经过 LLM）。
   // 单页填充失败自动降级为自由创作页。
   const skeletonCache = new Map<string, string>()
-  const lockedPageBindings = new Map<string, {
-    layoutAssetId: string
-    contentPackage: { title: string; body: string; listItems: string[]; metrics?: string[] }
-    moduleRange?: { min: number; max: number }
-  }>()
+  const lockedPageBindings = new Map<
+    string,
+    {
+      layoutAssetId: string
+      contentPackage: { title: string; body: string; listItems: string[]; metrics?: string[] }
+      moduleRange?: { min: number; max: number }
+    }
+  >()
   for (let index = 0; index < pageRefs.length; index += 1) {
     const assigned = lockedAssignments[index]
     const page = pageRefs[index]
@@ -879,7 +903,10 @@ export async function executeDeckGeneration(
           ...(metricValues.length > 0 ? { metrics: metricValues } : {})
         },
         moduleRange: listSlot
-          ? { min: (assigned.slots.find((s) => s.kind === 'list') as { minItems: number }).minItems, max: listSlot.maxItems }
+          ? {
+              min: (assigned.slots.find((s) => s.kind === 'list') as { minItems: number }).minItems,
+              max: listSlot.maxItems
+            }
           : undefined
       })
       await persistCompletedGeneratedPage({
@@ -888,6 +915,8 @@ export async function executeDeckGeneration(
         title: page.title,
         contentOutline: outline.contentOutline,
         layoutIntent: outline.layoutIntent,
+        visualFormat: outline.visualFormat,
+        audienceMove: outline.audienceMove,
         htmlPath: page.htmlPath
       })
     } catch (layoutError) {
@@ -934,61 +963,59 @@ export async function executeDeckGeneration(
     agentOutcome = await runDeepAgentDeckGeneration({
       appendSessionEvent: (data) =>
         db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
-    sessionId: context.sessionId,
-    provider: context.provider,
-    apiKey: context.apiKey,
-    model: context.model,
-    baseUrl: context.providerBaseUrl,
-    maxTokens: context.maxTokens,
-    modelTimeoutMs: context.modelTimeouts.agent,
-    temperature: PAGE_GENERATION_TEMPERATURE,
-    pageConcurrency: context.pageConcurrency,
-    styleId: context.styleId,
-    styleSkillPrompt: context.styleSkill.prompt,
-    layoutRulesPrompt: context.layoutRulesPrompt,
-    styleKey: context.styleKey,
-    styleName: context.styleName,
-    styleVersion: context.styleVersion,
-    slideSize: context.slideSize,
-    appLocale: context.appLocale,
-    animationPreferences: context.animationPreferences,
-    topic: context.topic,
-    deckTitle: context.deckTitle,
-    userMessage: context.userMessage,
-    outlineTitles,
-    outlineItems,
-    pageTasks: llmPageRefs.map((page) => ({
-      pageNumber: page.pageNumber,
-      pageId: page.pageId,
-      title: page.title,
-      contentOutline: outlineItems[page.pageNumber - 1]?.contentOutline || '',
-      layoutIntent: outlineItems[page.pageNumber - 1]?.layoutIntent,
-      contentStructure: outlineItems[page.pageNumber - 1]?.contentStructure,
-      moduleCount: outlineItems[page.pageNumber - 1]?.moduleCount,
-      visualAspect: outlineItems[page.pageNumber - 1]?.visualAspect,
-      contentDensity: outlineItems[page.pageNumber - 1]?.contentDensity,
-      visualFormat: outlineItems[page.pageNumber - 1]?.visualFormat,
-      audienceMove: outlineItems[page.pageNumber - 1]?.audienceMove,
-      layoutId: outlineItems[page.pageNumber - 1]?.layoutId,
-      imageAssetPath: outlineItems[page.pageNumber - 1]?.imageAssetPath,
-      imageAssetPaths: outlineItems[page.pageNumber - 1]?.imageAssetPaths,
-      backgroundAsset: outlineItems[page.pageNumber - 1]?.backgroundAsset
-    })),
-    sourceDocumentPaths: context.sourceDocumentPaths,
-    generationMode: 'generate',
-    designContract,
-    projectDir: context.projectDir,
-    indexPath,
-    pageFileMap: Object.fromEntries(
-      llmPageRefs.map((page) => [page.pageId, page.htmlPath])
-    ),
-    pageNumbers: Object.fromEntries(llmPageRefs.map((page) => [page.pageId, page.pageNumber])),
-    agentManager,
-    emit: (chunk) => emitDeckChunk(chunk),
-    onPageCompleted: persistCompletedGeneratedPage,
-    onPageFailed: persistFailedGeneratedPage,
-    runId: context.runId,
-    signal: context.abortSignal
+      sessionId: context.sessionId,
+      provider: context.provider,
+      apiKey: context.apiKey,
+      model: context.model,
+      baseUrl: context.providerBaseUrl,
+      maxTokens: context.maxTokens,
+      modelTimeoutMs: context.modelTimeouts.agent,
+      temperature: PAGE_GENERATION_TEMPERATURE,
+      pageConcurrency: context.pageConcurrency,
+      styleId: context.styleId,
+      styleSkillPrompt: context.styleSkill.prompt,
+      layoutRulesPrompt: context.layoutRulesPrompt,
+      styleKey: context.styleKey,
+      styleName: context.styleName,
+      styleVersion: context.styleVersion,
+      slideSize: context.slideSize,
+      appLocale: context.appLocale,
+      animationPreferences: context.animationPreferences,
+      topic: context.topic,
+      deckTitle: context.deckTitle,
+      userMessage: context.userMessage,
+      outlineTitles,
+      outlineItems,
+      pageTasks: llmPageRefs.map((page) => ({
+        pageNumber: page.pageNumber,
+        pageId: page.pageId,
+        title: page.title,
+        contentOutline: outlineItems[page.pageNumber - 1]?.contentOutline || '',
+        layoutIntent: outlineItems[page.pageNumber - 1]?.layoutIntent,
+        contentStructure: outlineItems[page.pageNumber - 1]?.contentStructure,
+        moduleCount: outlineItems[page.pageNumber - 1]?.moduleCount,
+        visualAspect: outlineItems[page.pageNumber - 1]?.visualAspect,
+        contentDensity: outlineItems[page.pageNumber - 1]?.contentDensity,
+        visualFormat: outlineItems[page.pageNumber - 1]?.visualFormat,
+        audienceMove: outlineItems[page.pageNumber - 1]?.audienceMove,
+        layoutId: outlineItems[page.pageNumber - 1]?.layoutId,
+        imageAssetPath: outlineItems[page.pageNumber - 1]?.imageAssetPath,
+        imageAssetPaths: outlineItems[page.pageNumber - 1]?.imageAssetPaths,
+        backgroundAsset: outlineItems[page.pageNumber - 1]?.backgroundAsset
+      })),
+      sourceDocumentPaths: context.sourceDocumentPaths,
+      generationMode: 'generate',
+      designContract,
+      projectDir: context.projectDir,
+      indexPath,
+      pageFileMap: Object.fromEntries(llmPageRefs.map((page) => [page.pageId, page.htmlPath])),
+      pageNumbers: Object.fromEntries(llmPageRefs.map((page) => [page.pageId, page.pageNumber])),
+      agentManager,
+      emit: (chunk) => emitDeckChunk(chunk),
+      onPageCompleted: persistCompletedGeneratedPage,
+      onPageFailed: persistFailedGeneratedPage,
+      runId: context.runId,
+      signal: context.abortSignal
     })
   }
   const { summary: agentSummary, failedPages, pendingPages, pause } = agentOutcome
@@ -1040,12 +1067,15 @@ export async function executeDeckGeneration(
       completedPageIdSet.size > 0 ? 'partial' : 'failed',
       pause.failure.technicalDetail
     )
-    await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
-      lastRunId: context.runId,
-      entryMode: 'multi_page',
-      indexPath,
-      projectId: context.projectId
-    }))
+    await db.updateSessionMetadata(
+      context.sessionId,
+      buildSessionMetadata({
+        lastRunId: context.runId,
+        entryMode: 'multi_page',
+        indexPath,
+        projectId: context.projectId
+      })
+    )
     await db.updateSessionDesignContract(context.sessionId, designContract)
     await db.updateProjectStatus(context.projectId, 'draft')
     emitDeckChunk({
@@ -1211,6 +1241,8 @@ export async function executeDeckGeneration(
         title: pageRef.title,
         contentOutline: outlineItems[pageRef.pageNumber - 1]?.contentOutline || '',
         layoutIntent: outlineItems[pageRef.pageNumber - 1]?.layoutIntent,
+        visualFormat: outlineItems[pageRef.pageNumber - 1]?.visualFormat,
+        audienceMove: outlineItems[pageRef.pageNumber - 1]?.audienceMove,
         layoutId: outlineItems[pageRef.pageNumber - 1]?.layoutId,
         imageAssetPath: outlineItems[pageRef.pageNumber - 1]?.imageAssetPath,
         imageAssetPaths: outlineItems[pageRef.pageNumber - 1]?.imageAssetPaths,
@@ -1280,6 +1312,8 @@ export async function executeDeckGeneration(
         title: pageRef.title,
         contentOutline: outlineItems[pageRef.pageNumber - 1]?.contentOutline || '',
         layoutIntent: outlineItems[pageRef.pageNumber - 1]?.layoutIntent,
+        visualFormat: outlineItems[pageRef.pageNumber - 1]?.visualFormat,
+        audienceMove: outlineItems[pageRef.pageNumber - 1]?.audienceMove,
         layoutId: outlineItems[pageRef.pageNumber - 1]?.layoutId,
         imageAssetPath: outlineItems[pageRef.pageNumber - 1]?.imageAssetPath,
         imageAssetPaths: outlineItems[pageRef.pageNumber - 1]?.imageAssetPaths,
@@ -1329,12 +1363,15 @@ export async function executeDeckGeneration(
       pageDescriptors.length > 0 ? 'partial' : 'failed',
       failedDetails
     )
-    await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
-      lastRunId: context.runId,
-      entryMode: 'multi_page',
-      indexPath,
-      projectId: context.projectId
-    }))
+    await db.updateSessionMetadata(
+      context.sessionId,
+      buildSessionMetadata({
+        lastRunId: context.runId,
+        entryMode: 'multi_page',
+        indexPath,
+        projectId: context.projectId
+      })
+    )
     await db.updateSessionDesignContract(context.sessionId, designContract)
     await db.updateProjectStatus(context.projectId, 'draft')
     emitDeckChunk({
@@ -1458,29 +1495,34 @@ export async function executeDeckGeneration(
   // 遥测落盘 + 日志汇总
   telemetry.logSummary()
   // 会话事件日志：记录运行完成
-  await db.appendSessionEvent({
-    sessionId: context.sessionId,
-    runId: context.runId,
-    eventType: 'run/completed',
-    actor: 'ai',
-    payload: {
-      totalPages: pageRefs.length,
-      completedPages: pageDescriptors.length,
-      failedPages: failedPages.length,
-      totalMs: telemetry.toMetadata().totalMs
-    }
-  }).catch(() => undefined)
+  await db
+    .appendSessionEvent({
+      sessionId: context.sessionId,
+      runId: context.runId,
+      eventType: 'run/completed',
+      actor: 'ai',
+      payload: {
+        totalPages: pageRefs.length,
+        completedPages: pageDescriptors.length,
+        failedPages: failedPages.length,
+        totalMs: telemetry.toMetadata().totalMs
+      }
+    })
+    .catch(() => undefined)
   const telemetryMetadata = telemetry.toMetadata()
   // 版式绑定持久化：控件面板免 AI 重渲染的数据源
   const pageLayoutBindings = Object.fromEntries(lockedPageBindings.entries())
   await db.updateGenerationRunStatus(context.runId, 'completed', null)
-  await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
-    lastRunTelemetry: telemetryMetadata,
-    ...(Object.keys(pageLayoutBindings).length > 0 ? { pageLayoutBindings } : {}),
-    ...(integrityReport.violations.length > 0
-      ? { lastAssetWarnings: integrityReport.violations.slice(0, 20) }
-      : {})
-  }))
+  await db.updateSessionMetadata(
+    context.sessionId,
+    buildSessionMetadata({
+      lastRunTelemetry: telemetryMetadata,
+      ...(Object.keys(pageLayoutBindings).length > 0 ? { pageLayoutBindings } : {}),
+      ...(integrityReport.violations.length > 0
+        ? { lastAssetWarnings: integrityReport.violations.slice(0, 20) }
+        : {})
+    })
+  )
   await finalizeGenerationSuccess(ctx, {
     context,
     indexPath,

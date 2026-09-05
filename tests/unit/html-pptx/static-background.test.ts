@@ -12,6 +12,12 @@ describe('PPTX static background shape classification', () => {
     expect(isPptxStaticBackgroundShape({ x: 0, y: 0, w: 6.133, h: 7.5 })).toBe(true)
   })
 
+  it('uses the same geometry rule for full-slide image backgrounds', () => {
+    const image = { x: 0, y: 0, w: 13.333, h: 7.5, dataUri: 'data:image/png;base64,x' }
+
+    expect(isPptxStaticBackgroundShape(image)).toBe(true)
+  })
+
   it('keeps regular cards and centered large content shapes editable', () => {
     expect(isPptxStaticBackgroundShape({ x: 6.6, y: 4.3, w: 6.2, h: 0.8 })).toBe(false)
     expect(isPptxStaticBackgroundShape({ x: 1, y: 1, w: 10, h: 5 })).toBe(false)

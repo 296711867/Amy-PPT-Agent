@@ -59,6 +59,7 @@ const TEXT_RESIDUE_GRID_COLUMNS = 18
 const TEXT_RESIDUE_GRID_ROWS = 10
 const TEXT_RESIDUE_COLOR_DISTANCE = 62
 const TEXT_RESIDUE_RATIO_THRESHOLD = 0.075
+const TEXT_RESIDUE_UNIFORM_FILL_RATIO = 0.7
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -99,7 +100,7 @@ const pixelMatchesTextColor = (
   return colorDistance({ r, g, b }, target) <= TEXT_RESIDUE_COLOR_DISTANCE
 }
 
-const hasTextResidueInCapture = (
+export const hasTextResidueInCapture = (
   image: NativeImage,
   texts: HtmlToPptxTextBox[],
   layout: PptxExportLayout
@@ -158,7 +159,12 @@ const hasTextResidueInCapture = (
     if (samples === 0) continue
     const ratio = textLikePixels / samples
     maxRatio = Math.max(maxRatio, ratio)
-    if (textLikePixels >= 8 && ratio >= TEXT_RESIDUE_RATIO_THRESHOLD) {
+    // A near-solid match is the element/background fill, not glyph residue.
+    if (
+      textLikePixels >= 8 &&
+      ratio >= TEXT_RESIDUE_RATIO_THRESHOLD &&
+      ratio <= TEXT_RESIDUE_UNIFORM_FILL_RATIO
+    ) {
       return { suspicious: true, checkedBoxes, maxRatio }
     }
   }
@@ -416,6 +422,9 @@ export const extractHtmlPageToPptxSlide = async ({
     // based animation matching to capture unrelated animated text.
     if (slide.shapes?.length) {
       slide.shapes = slide.shapes.filter((shape) => !isPptxStaticBackgroundShape(shape, layout))
+    }
+    if (slide.images?.length) {
+      slide.images = slide.images.filter((image) => !isPptxStaticBackgroundShape(image, layout))
     }
 
     if (animationMode === 'slide-transition') {

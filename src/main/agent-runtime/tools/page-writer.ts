@@ -353,14 +353,19 @@ export function createPageWriteTools(args: {
                 : '当前会话未锁定单页。请改用 update_page_file(content) 或在上下文中指定 selectedPageId。'
             )
           }
-          if (targetPageId && pageId !== targetPageId) {
+          if (pageId && pageId !== targetPageId) {
             throw new Error(`单页编辑工具仅允许目标页面 ${targetPageId}；收到: ${pageId}`)
           }
+          const resolvedPageId = pageId || targetPageId
           return writePageFile({
-            pageId,
+            pageId: resolvedPageId,
             content,
             config,
-            statusLabel: uiText(context.appLocale, `更新单页 ${pageId}`, `Updating ${pageId}`)
+            statusLabel: uiText(
+              context.appLocale,
+              `更新单页 ${resolvedPageId}`,
+              `Updating ${resolvedPageId}`
+            )
           })
         },
         {
@@ -368,19 +373,20 @@ export function createPageWriteTools(args: {
             ? 'update_template_page_file'
             : 'update_single_page_file',
           description: context.templatePageReadRequired
-            ? 'Template-preserving page generation tool. Pass pageId and a complete creative page fragment based on the copied template page. It validates pageId and rejects writes that drop template background/decorative CSS url(...) resources, SVG image hrefs, or decorative local media references.'
-            : 'Single-page edit tool. Pass pageId and content explicitly; the tool validates pageId against the current single-page context to avoid modifying other pages.',
+            ? 'Template-preserving page generation tool. Pass a complete creative page fragment based on the copied template page. pageId is optional because this tool is already locked to the current page; when supplied, it must match that page. It rejects writes that drop template background/decorative CSS url(...) resources, SVG image hrefs, or decorative local media references.'
+            : 'Single-page edit tool. Pass content and optionally pageId; this tool is already locked to the current page, and any supplied pageId must match it.',
           schema: z.object({
             pageId: z
               .string()
+              .optional()
               .describe(
-                'Target pageId, for example "page-<slug>". It must match the current single-page context.'
+                'Optional target pageId, for example "page-<slug>". When supplied, it must match the current single-page context.'
               ),
             content: z
               .string()
               .describe(
                 context.templatePageReadRequired
-                  ? 'Complete creative page HTML fragment based on the copied template page. Keep template background/decorative layers and exact local asset references from the inspected template page while replacing old business text/data. The tool will add the runtime page frame when needed. Do not pass <!doctype>, <html>, <head>, <body>, .ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, data-ppt-guard-root, or runtime shell markup.'
+                  ? 'Complete page HTML fragment, edit-in-place from the inspected template page: keep its absolutely positioned top-level containers (background, logos, title blocks, entry blocks, decorative lines) as direct siblings and only replace text/data inside them; clone or delete entry containers when the new content needs more or fewer entries; never merge containers into one wrapper. Do NOT wrap the fragment in your own <main> element — pass the template containers as direct siblings (the tool adds the content main). Keep template background/decorative layers and exact local asset references. Do not pass <!doctype>, <html>, <head>, <body>, .ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, data-ppt-guard-root, or runtime shell markup.'
                   : 'Complete creative page HTML fragment only. The tool will add section[data-page-scaffold], main[data-role="content"], editable data-block-id attributes, and the runtime page frame when needed. Do not pass <!doctype>, <html>, <head>, <body>, .ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, data-ppt-guard-root, or any runtime shell markup.'
               )
           })

@@ -18,19 +18,16 @@ import { buildLocalCompletedGenerationPageSummary } from './generation-summary'
 import { classifyGenerationError } from '@shared/generation-error'
 import { hasCommittedGeneratedPage } from './page-commit'
 import {
+  buildEmptyTurnContinuationMessage,
   buildPageNotWrittenMessage,
   extractHtmlFragmentCandidate,
-  extractWriteValidationFailure
+  extractWriteValidationFailure,
+  isModelEmptyTurn
 } from './page-write-failure'
 import { persistPageHtmlFromFragment } from '../presentation/html/page-writer-core'
 import { validateAssignedDeckBackground } from './deck-backgrounds'
 import { resolveTitleBandAnchor } from './title-band-anchor'
-import {
-  modelCallSignal,
-  readPageHtmlIfExists,
-  uiText,
-  withModelControl
-} from './runner-shared'
+import { modelCallSignal, readPageHtmlIfExists, uiText, withModelControl } from './runner-shared'
 import {
   resolvePageProgressFromCustomStatus,
   type PageProgressTracker
@@ -262,80 +259,104 @@ export const createSinglePageGenerator = (context: {
           : null,
         userPromptMetrics: measurePromptText(userPrompt)
       })
-      const stream = await deepAgent.stream(
-        {
-          messages: [
-            {
-              role: 'user',
-              content: userPrompt
-            }
-          ]
-        },
-        {
-          streamMode: ['updates', 'messages', 'custom'],
-          subgraphs: true,
-          signal: combinedSignal
-        }
-      )
-
+      // GLM-5.x 等思考模型在部分端点上会随机返回「只有思考、无正文、无任何
+      // 工具调用」的空回合（实测约半数页面尝试命中）。与其立刻整页重建重试，
+      // 不如把会话历史发回同一个 agent 续跑一次，成本远低于完整重试。
+      const MAX_EMPTY_TURN_CONTINUATIONS = 2
+      let conversationMessages: unknown[] = [{ role: 'user', content: userPrompt }]
       // Final user-facing generation replies are built later from validated page facts.
       // Raw messages may be token deltas, tool-call turns, or cumulative provider chunks.
       let streamError: unknown = null
       let lastWriteValidationFailure = ''
       let finalAssistantText = ''
-      try {
-        const streamOutcome = await processAgentStreamCore(stream, {
-          emit: args.emit,
-          runId: args.runId || '',
-          stage: 'rendering',
-          totalPages: context.totalPages,
-          provider: args.provider,
-          model: args.model,
-          sessionId: args.sessionId,
-          workerLabel,
-          onCustom: (custom) => {
-            const writeValidationFailure = extractWriteValidationFailure(custom)
-            if (writeValidationFailure) lastWriteValidationFailure = writeValidationFailure
-            const mappedPageProgress = resolvePageProgressFromCustomStatus(custom)
-            const normalizedLabel = progressLabel(args.appLocale, custom.label)
-            const normalizedDetail =
-              /所有页面已填充|当前页面已填充|All pages filled|Current page filled/i.test(
-                custom.label || ''
-              )
-                ? uiText(
-                    args.appLocale,
-                    `${page.title} · 页面内容已写入`,
-                    `${page.title} · page content written`
-                  )
-                : custom.detail
-            progress.emitPageStatus({
-              pageId: page.pageId,
-              label:
-                normalizedLabel === progressText(args.appLocale, 'generating')
-                  ? context.renderingLabel
-                  : normalizedLabel,
-              detail: normalizedDetail,
-              pageProgress: mappedPageProgress
-            })
-          },
-          onModelThinking: (defaultProgress) => {
-            const mappedPageProgress = Math.max(12, Math.min(96, defaultProgress))
-            progress.emitPageStatus({
-              pageId: page.pageId,
-              label: context.renderingLabel,
-              detail: page.title,
-              pageProgress: mappedPageProgress
-            })
-          }
-        })
-        finalAssistantText = streamOutcome.finalAssistantText
-      } catch (error) {
-        streamError = error
-      }
+      let sawToolCallInRun = false
+      let modelReturnedEmptyTurn = false
+      let afterPageHtml = ''
+      let pageCommitted = false
 
-      let afterPageHtml = await readPageHtmlIfExists(currentPagePath)
-      let pageCommitted = hasCommittedGeneratedPage(beforePageHtml, afterPageHtml)
-      if (!pageCommitted && !streamError) {
+      for (
+        let continuationRound = 0;
+        continuationRound <= MAX_EMPTY_TURN_CONTINUATIONS;
+        continuationRound += 1
+      ) {
+        const stream = await deepAgent.stream(
+          {
+            messages: conversationMessages
+          },
+          {
+            streamMode: ['updates', 'messages', 'custom'],
+            subgraphs: true,
+            signal: combinedSignal
+          }
+        )
+
+        try {
+          const streamOutcome = await processAgentStreamCore(stream, {
+            emit: args.emit,
+            runId: args.runId || '',
+            stage: 'rendering',
+            totalPages: context.totalPages,
+            provider: args.provider,
+            model: args.model,
+            sessionId: args.sessionId,
+            workerLabel,
+            onCustom: (custom) => {
+              const writeValidationFailure = extractWriteValidationFailure(custom)
+              if (writeValidationFailure) lastWriteValidationFailure = writeValidationFailure
+              const mappedPageProgress = resolvePageProgressFromCustomStatus(custom)
+              const normalizedLabel = progressLabel(args.appLocale, custom.label)
+              const normalizedDetail =
+                /所有页面已填充|当前页面已填充|All pages filled|Current page filled/i.test(
+                  custom.label || ''
+                )
+                  ? uiText(
+                      args.appLocale,
+                      `${page.title} · 页面内容已写入`,
+                      `${page.title} · page content written`
+                    )
+                  : custom.detail
+              progress.emitPageStatus({
+                pageId: page.pageId,
+                label:
+                  normalizedLabel === progressText(args.appLocale, 'generating')
+                    ? context.renderingLabel
+                    : normalizedLabel,
+                detail: normalizedDetail,
+                pageProgress: mappedPageProgress
+              })
+            },
+            onModelThinking: (defaultProgress) => {
+              const mappedPageProgress = Math.max(12, Math.min(96, defaultProgress))
+              progress.emitPageStatus({
+                pageId: page.pageId,
+                label: context.renderingLabel,
+                detail: page.title,
+                pageProgress: mappedPageProgress
+              })
+            }
+          })
+          finalAssistantText = streamOutcome.finalAssistantText
+          sawToolCallInRun = sawToolCallInRun || streamOutcome.sawToolCall
+          if (streamOutcome.conversationMessages.length > 0) {
+            conversationMessages = streamOutcome.sawHumanMessage
+              ? streamOutcome.conversationMessages
+              : [{ role: 'user', content: userPrompt }, ...streamOutcome.conversationMessages]
+          }
+        } catch (error) {
+          streamError = error
+          // The model may time out after the write tool has already committed the
+          // page (for example while producing its final acknowledgement). The file
+          // is the product; a trailing model turn must not turn a valid commit into
+          // a failure or feed a false MODEL_TIMEOUT into the run circuit breaker.
+          afterPageHtml = await readPageHtmlIfExists(currentPagePath)
+          pageCommitted = hasCommittedGeneratedPage(beforePageHtml, afterPageHtml)
+          break
+        }
+
+        afterPageHtml = await readPageHtmlIfExists(currentPagePath)
+        pageCommitted = hasCommittedGeneratedPage(beforePageHtml, afterPageHtml)
+        if (pageCommitted) break
+
         // 模型没调用写盘工具、但把 HTML 写在了最终回复里时，直接提取落盘，
         // 走同一套修复/校验管道，避免重试耗尽整页失败。
         const rescueCandidate = extractHtmlFragmentCandidate(finalAssistantText)
@@ -381,6 +402,7 @@ export const createSinglePageGenerator = (context: {
               message: rescueError instanceof Error ? rescueError.message : String(rescueError)
             })
           }
+          if (pageCommitted) break
         } else {
           log.warn('[deepagent] page not written; final assistant text preview', {
             sessionId: args.sessionId,
@@ -389,14 +411,60 @@ export const createSinglePageGenerator = (context: {
             preview: finalAssistantText.slice(0, 400)
           })
         }
+
+        const emptyTurn = isModelEmptyTurn({
+          sawToolCall: sawToolCallInRun,
+          finalAssistantText
+        })
+        modelReturnedEmptyTurn = emptyTurn
+        if (!emptyTurn || continuationRound >= MAX_EMPTY_TURN_CONTINUATIONS) break
+        log.warn('[deepagent] model returned an empty turn; continuing the same session', {
+          sessionId: args.sessionId,
+          pageId: page.pageId,
+          worker: workerLabel,
+          continuationRound: continuationRound + 1,
+          maxContinuations: MAX_EMPTY_TURN_CONTINUATIONS,
+          provider: args.provider,
+          model: args.model
+        })
+        progress.emitPageStatus({
+          pageId: page.pageId,
+          label: progressText(args.appLocale, 'retrying'),
+          detail: uiText(
+            args.appLocale,
+            `${page.title} · 模型返回空回复，同一会话自动续跑`,
+            `${page.title} · model returned an empty turn; continuing automatically`
+          ),
+          pageProgress: 15
+        })
+        conversationMessages = [
+          ...conversationMessages,
+          {
+            role: 'user',
+            content: buildEmptyTurnContinuationMessage({
+              pageId: page.pageId,
+              writeToolName,
+              continuationRound: continuationRound + 1
+            })
+          }
+        ]
       }
       if (streamError && !pageCommitted) throw streamError
       if (!pageCommitted) {
+        log.error('[deepagent] page not written after continuations', {
+          sessionId: args.sessionId,
+          pageId: page.pageId,
+          worker: workerLabel,
+          modelReturnedEmptyTurn,
+          sawToolCallInRun,
+          lastWriteValidationFailure
+        })
         throw new Error(
           buildPageNotWrittenMessage({
             pageId: page.pageId,
             writeToolName,
-            lastWriteValidationFailure
+            lastWriteValidationFailure,
+            modelReturnedEmptyTurn
           })
         )
       }
@@ -448,6 +516,8 @@ export const createSinglePageGenerator = (context: {
         title: page.title,
         contentOutline: page.outline,
         layoutIntent: page.layoutIntent,
+        visualFormat: page.visualFormat,
+        audienceMove: page.audienceMove,
         layoutId: page.layoutId,
         imageAssetPath: page.imageAssetPath,
         imageAssetPaths: page.imageAssetPaths,

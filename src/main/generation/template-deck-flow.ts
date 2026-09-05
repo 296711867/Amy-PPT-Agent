@@ -17,6 +17,10 @@ import {
   TEMPLATE_SINGLE_PAGE_PROMPT_ADDENDUM,
   TEMPLATE_SYSTEM_PROMPT_ADDENDUM
 } from './template-prompt-addenda'
+import {
+  resolvePlannedVisualFormat,
+  resolveInheritedAnimationPreferences
+} from '@shared/generation'
 import { canUseSourcePlanDirectly, mapSourcePlanToOutlineItems } from './source-plan'
 import type { GenerationContext, RuntimeJobExecutionContext } from './context'
 import { prepareDeckImageAssets } from './deck-images'
@@ -25,6 +29,10 @@ import {
   diversifyUniversalLayoutSequence,
   normalizeUniversalLayoutId
 } from '@shared/universal-layouts'
+import {
+  isUntouchedTemplateSeed,
+  resolveUnconfirmedTemplatePageFailure
+} from '../templates/template-seed-fingerprint'
 
 type TemplateSeedPage = {
   id: string
@@ -62,6 +70,15 @@ export async function resolveTemplateDeckContext(
   const payloadRecord =
     payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
   const templateRetry = payloadRecord.retry === true
+  // 模板重试可能发生在重启之后（路由 state 已丢），从最近一次 run 继承动画偏好，
+  // 与标准 retry 链路的 resolveInheritedAnimationPreferences 行为保持一致。
+  if (templateRetry && !context.animationPreferences) {
+    const latestRun = await ctx.db.getLatestGenerationRun(context.sessionId)
+    context.animationPreferences = resolveInheritedAnimationPreferences(
+      latestRun,
+      context.sessionId
+    )
+  }
 
   const sessionPages = await ctx.db.listSessionPages(context.sessionId)
   const allSeedPages = sessionPages
@@ -120,6 +137,11 @@ export async function executeTemplateDeckGeneration(
   const templateMetadata = parseJsonObject(
     context.sessionRecord.metadata ?? context.sessionRecord.metadata_json
   )
+  const templateSeedFingerprints =
+    templateMetadata.templateSeedFingerprints &&
+    typeof templateMetadata.templateSeedFingerprints === 'object'
+      ? (templateMetadata.templateSeedFingerprints as Record<string, string>)
+      : {}
   const templateDesignContract = resolveTemplateDesignContract(
     context.sessionRecord.designContract,
     templateMetadata
@@ -180,6 +202,7 @@ export async function executeTemplateDeckGeneration(
     mode: 'generate',
     totalPages: pageRefs.length,
     modelConfigId: context.modelConfigId,
+    animationPreferences: context.animationPreferences,
     metadata: {
       templateGeneration: true,
       templateRetry: context.templateRetry,
@@ -228,8 +251,11 @@ export async function executeTemplateDeckGeneration(
           moduleCount: undefined,
           visualAspect: undefined,
           contentDensity: undefined,
-          visualFormat: undefined,
-          audienceMove: undefined,
+          visualFormat: resolvePlannedVisualFormat(
+            snapshot?.visual_format,
+            snapshot?.layout_intent ? normalizeLayoutIntent(snapshot.layout_intent) : undefined
+          ),
+          audienceMove: snapshot?.audience_move || undefined,
           layoutId: normalizeUniversalLayoutId(snapshot?.layout_id),
           imageAssetPath: snapshot?.image_asset_path || undefined,
           imageAssetPaths: snapshot?.image_asset_paths || undefined
@@ -338,6 +364,8 @@ export async function executeTemplateDeckGeneration(
       title: page.title,
       contentOutline: outlineItems[index]?.contentOutline || '',
       layoutIntent: outlineItems[index]?.layoutIntent,
+      visualFormat: outlineItems[index]?.visualFormat,
+      audienceMove: outlineItems[index]?.audienceMove,
       layoutId: outlineItems[index]?.layoutId,
       imageAssetPath: outlineItems[index]?.imageAssetPath,
       imageAssetPaths: outlineItems[index]?.imageAssetPaths,
@@ -438,6 +466,8 @@ export async function executeTemplateDeckGeneration(
     title: string
     contentOutline: string
     layoutIntent?: LayoutIntent
+    visualFormat?: import('@shared/generation').OutlineItem['visualFormat']
+    audienceMove?: import('@shared/generation').OutlineItem['audienceMove']
     layoutId?: import('@shared/generation').OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]
@@ -451,6 +481,9 @@ export async function executeTemplateDeckGeneration(
     if (!validation.valid) {
       throw new Error(`HTML 验证失败 (${page.pageId}): ${validation.errors.join('; ')}`)
     }
+    if (isUntouchedTemplateSeed(html, templateSeedFingerprints[page.pageId])) {
+      throw new Error('页面未被生成改写（仍为模板基底）')
+    }
     await db.upsertGenerationPage({
       runId: context.runId,
       sessionId: context.sessionId,
@@ -459,6 +492,8 @@ export async function executeTemplateDeckGeneration(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -499,6 +534,8 @@ export async function executeTemplateDeckGeneration(
     title: string
     contentOutline: string
     layoutIntent?: LayoutIntent
+    visualFormat?: import('@shared/generation').OutlineItem['visualFormat']
+    audienceMove?: import('@shared/generation').OutlineItem['audienceMove']
     layoutId?: import('@shared/generation').OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]
@@ -513,6 +550,8 @@ export async function executeTemplateDeckGeneration(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -524,8 +563,8 @@ export async function executeTemplateDeckGeneration(
   }
 
   const { summary: agentSummary, failedPages } = await runDeepAgentDeckGeneration({
-      appendSessionEvent: (data) =>
-        db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
+    appendSessionEvent: (data) =>
+      db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
     sessionId: context.sessionId,
     provider: context.provider,
     apiKey: context.apiKey,
@@ -544,6 +583,7 @@ export async function executeTemplateDeckGeneration(
     styleVersion: context.styleVersion,
     slideSize: context.slideSize,
     appLocale: context.appLocale,
+    animationPreferences: context.animationPreferences,
     topic: context.topic,
     deckTitle: context.deckTitle,
     userMessage: context.userMessage,
@@ -563,6 +603,8 @@ export async function executeTemplateDeckGeneration(
         moduleCount: outlineItems[index]?.moduleCount,
         visualAspect: outlineItems[index]?.visualAspect,
         contentDensity: outlineItems[index]?.contentDensity,
+        visualFormat: outlineItems[index]?.visualFormat,
+        audienceMove: outlineItems[index]?.audienceMove,
         layoutId: outlineItems[index]?.layoutId,
         imageAssetPath: outlineItems[index]?.imageAssetPath,
         imageAssetPaths: outlineItems[index]?.imageAssetPaths,
@@ -636,6 +678,19 @@ export async function executeTemplateDeckGeneration(
       })
       continue
     }
+    const unconfirmedFailure = resolveUnconfirmedTemplatePageFailure({
+      html,
+      seedFingerprint: templateSeedFingerprints[pageRef.pageId],
+      completedCallbackObserved: persistedGeneratedPagesById.has(pageRef.pageId)
+    })
+    if (unconfirmedFailure) {
+      postValidationFailures.push({
+        pageId: pageRef.pageId,
+        title: pageRef.title,
+        reason: unconfirmedFailure
+      })
+      continue
+    }
     if (isPlaceholderPageHtml(html)) {
       placeholderPages.push(pageRef.pageId)
     }
@@ -647,23 +702,6 @@ export async function executeTemplateDeckGeneration(
       htmlPath: pageRef.htmlPath,
       html
     })
-    if (!persistedGeneratedPagesById.has(pageRef.pageId)) {
-      const outlineIndex = pageRefs.findIndex((item) => item.pageId === pageRef.pageId)
-      await db.upsertGenerationPage({
-        runId: context.runId,
-        sessionId: context.sessionId,
-        pageId: pageRef.pageId,
-        pageNumber: pageRef.pageNumber,
-        title: pageRef.title,
-        contentOutline: outlineItems[outlineIndex]?.contentOutline || '',
-        layoutIntent: outlineItems[outlineIndex]?.layoutIntent,
-        layoutId: outlineItems[outlineIndex]?.layoutId,
-        imageAssetPath: outlineItems[outlineIndex]?.imageAssetPath,
-        imageAssetPaths: outlineItems[outlineIndex]?.imageAssetPaths,
-        htmlPath: pageRef.htmlPath,
-        status: 'completed'
-      })
-    }
   }
 
   const allFailedPages = [

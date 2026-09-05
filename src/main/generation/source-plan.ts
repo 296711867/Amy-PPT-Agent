@@ -2,6 +2,7 @@ import {
   SECTION_AGENDA_OUTLINE_MARKER,
   isInternalDocumentPlanPageReason,
   isSectionAgendaReason,
+  resolvePlannedVisualFormat,
   type OutlineItem,
   type SourceDocumentPlan
 } from '@shared/generation'
@@ -204,7 +205,8 @@ export const mapSourcePlanToOutlineItems = (sourcePlan: SourceDocumentPlan): Out
             `Source range: lines ${item.lineStart}-${item.lineEnd}`,
             `Page role: ${item.role}`,
             item.reason ? `Page purpose: ${item.reason}` : ''
-          ])
+          ]
+      )
         .filter(Boolean)
         .join('\n'),
       layoutIntent,
@@ -212,6 +214,7 @@ export const mapSourcePlanToOutlineItems = (sourcePlan: SourceDocumentPlan): Out
       moduleCount,
       visualAspect: item.visualAspect,
       contentDensity: item.contentDensity,
+      visualFormat: resolvePlannedVisualFormat(undefined, layoutIntent),
       layoutId: moduleCount
         ? resolveUniversalLayoutId({
             value: item.layoutId,

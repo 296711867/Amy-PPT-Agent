@@ -373,6 +373,8 @@ export const sessionDocIpc = {
     pageCount?: number
     referenceDocumentPath?: string
     sourcePlan?: SourceDocumentPlan
+    initialPrompt?: string
+    imagePolicy?: import('@shared/generation').ImagePolicy
   }) =>
     getIpc().invoke('templates:createSession', payload) as Promise<{
       success: true

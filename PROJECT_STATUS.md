@@ -27,6 +27,10 @@
 - Unreleased runner/preview splits: `generation/agent-runner.ts` (1747 → 285) now orchestrates seven layered modules (shared helpers, page refs, run types, progress tracker, single-page generator with retry/backoff, deck review-repair, edit runner) with all legacy exports re-exported; `PreviewIframe.tsx` (1423 → 318) assembles a webview-command factory, a console-router hook, and pure helpers, re-exporting its handle type and predicates.
 - Unreleased title-band stability: regenerating or retrying a page now injects the deck's existing title band (extracted deterministically from the lowest-numbered written conventional page, falling back to the retried page's own previous version) as a hard prompt requirement, so the title band no longer shifts between attempts; cover/quote/image-focus pages and template imports are exempt, matching the deck quality validator's drift rules.
 - Unreleased run-resilience fixes from a real generation: placeholder scaffold pages can no longer supply the title-band anchor (their bare band was being replicated across regenerations), bare h1 title elements now get the 48px shell floor, and hidden-window render validation waits 25s and retries once on timeout instead of failing every page at 10s on loaded machines.
+- Unreleased generation-quality contract: deck and single-page planning now require an actionable `visualFormat` plus a `before → after` `audienceMove`, preserve richer structured outline evidence, reject page-count drift instead of padding empty slides, and persist the full page-plan package across generation, retry, page/deck edit, style switch, page beautify, and deck-review failure paths.
+- Unreleased empty-turn recovery: main-graph Agent conversation messages are retained, GLM 5+ avoids the unsupported `thinking.type=disabled` parameter, and a tool-less/text-less model turn continues in the same Agent session up to two times before consuming a full page retry.
+- Unreleased editor-history cleanup: the session editor and standalone HTML editor now use isolated instances of one shared Zustand history implementation; native `structuredClone` replaces manual cloning and each page is bounded to 100 undo/redo snapshots.
+- AI development governance is now centralized in [docs/development/AI_DEVELOPMENT_GUIDE.md](./docs/development/AI_DEVELOPMENT_GUIDE.md), with the generation-specific invariants in [docs/design/generation-quality-contract.md](./docs/design/generation-quality-contract.md). `AGENTS.md` requires future agents to use both documents and maintain the issue ledger.
 - Prompt-cache reconciliation on the real dev log (project logs/main.log): one system fingerprint across 10 agent calls, system 11390 tokens per deck, user 1607-2302 tokens per page.
 - Generation issue log: real-run defects from 2026-08-30 (render-validation timeouts failing whole decks, locked-layout shell/palette gaps, placeholder-image loss on the source-plan path, misleading "page not written" retry feedback) are tracked with root causes and fixes in [docs/design/generation-issue-log.md](./docs/design/generation-issue-log.md); append new real-run defects there before fixing them.
 - Resilience: 503/502 mapped into the shared rate-limit backoff class, plus the layout-library write-recursion hotfix.
@@ -49,9 +53,32 @@
 - Lint and build were not run, per repository instructions.
 - See [HANDOFF.md](./HANDOFF.md) for exact files, constraints, and next steps.
 
+## Verification Snapshot (2026-08-31)
+
+- Full Vitest run with four workers: 352 test files passed; 1898 tests passed and 10 environment/configuration tests skipped (1908 total).
+- Node and Web TypeScript checks passed; `git diff --check` passed.
+- Generation planning, metadata preservation, empty-turn continuation, page-write rescue, Deck review failure persistence, and isolated bounded edit history have focused regression coverage.
+- Lint and build were not run, per repository instructions.
+
+## Verification Snapshot (2026-09-03)
+
+- Template-generation workflow fixed and iterated on a real run (恒流LED模板 → 运放培训大纲):
+  - I-15: never-started template sessions no longer get their seed pages "recovered" to completed, and the generating page honors manual start intent instead of redirecting to the editor.
+  - I-16: the template brief persists at session creation (`templateInitialPrompt`), `animationPreferences` flows through the template chain (payload → run persistence → retry inheritance → per-page runner), and `ImagePolicy` gains `'none'` as the template default so template visuals are no longer forced into image-slot layouts with placeholder injections.
+  - Template use dialog now exposes 配图策略 (keep-template-visuals / placeholders / AI) and animation preference chips; font/AI-background/visual-element options stay out deliberately (the template page base is the visual source of truth).
+- Full Vitest run: 354 test files passed; 1907 tests passed and 10 environment/configuration tests skipped (1917 total). Node and Web TypeScript checks passed.
+- Lint and build were not run, per repository instructions.
+
+## Verification Snapshot (2026-09-05)
+
+- Template generation I-18–I-25 was validated against the resumed 15-page operational-amplifier run: all 15 pages changed from their template seed fingerprints, no LED seed text remained, every page reached a persisted terminal state, and transient model failures no longer create false completion.
+- Editable PPTX export I-26 was validated on the resulting 15-page deck: full-slide static backgrounds retain DOM stacking order, uniform fills no longer trigger false text-residue rasterization, all slides render correctly, and every slide retains text nodes.
+- Focused regression run: 43 test files passed, 302 tests passed and 9 environment-dependent tests skipped. Node and Web TypeScript checks and `git diff --check` passed.
+- Lint and build were not run, per repository instructions.
+
 ## Next Work
 
-- Generate one real deck, then run `node scripts/check-prompt-cache.mjs` to reconcile live fingerprint stability and token totals against the offline benchmark.
+- Repeat the template-generation and editable-export acceptance run with another provider/template pair to broaden real-world coverage.
 - Add rendered reference previews for the universal layout catalog.
 - Collect real-deck evaluation results to tune layout routing and density budgets.
 - Expand image prompt planning from generic slot subjects to explicit per-slot visual briefs.

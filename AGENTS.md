@@ -7,6 +7,13 @@
 
 Electron 桌面应用，主进程 (`src/main/`) + 渲染进程 (`src/renderer/`) + 共享类型 (`src/shared/`)。
 
+## Required Reading
+
+- 开始任务先读 `docs/development/AI_DEVELOPMENT_GUIDE.md`，按其中的变更覆盖矩阵定位相邻入口
+- 修改生成、重试、AI 编辑、风格切换或一键美化时，必须读 `docs/design/generation-quality-contract.md`
+- 真实生成故障先查 `docs/design/generation-issue-log.md`；确认新根因后按“现象 → 根因 → 修复 → 验证”追加记录
+- 模块位置以 `PROJECT_STRUCTURE.md` 为准；架构或职责变化时在同一变更中更新对应文档
+
 ## Code Style
 
 - `singleQuote`, `no semi`, `printWidth: 100`, `trailingComma: none`
@@ -17,8 +24,12 @@ Electron 桌面应用，主进程 (`src/main/`) + 渲染进程 (`src/renderer/`)
 - 先定位变更属于生成、编辑、导入、导出还是运行时；不要只修单一路径
 - 公共规则改动要同时确认生成与编辑链路是否覆盖，尤其是整页编辑、deck 编辑、selector 编辑
 - 改运行时资源时，同步确认 session asset 兼容/刷新机制
+- 页面规划字段必须检查 deck/page/source-plan、PageRef、completed/failed 回调、数据库和所有编辑/重试入口
+- 新生成页面的 `contentOutline`、`layoutIntent`、`visualFormat`、`audienceMove`、`layoutId` 是一个完整计划包，不得在重试、失败回写、风格切换或美化时丢失
+- 输入边界必须校验；内部共享规则放一个权威实现，不复制到多个 flow
 - 修 bug 时优先补定向回归测试，覆盖当前问题和相邻入口
 - 验证优先跑最小相关测试；不要跑 `npm run lint` 或 `npm run build`
+- 完成架构、契约、测试方式或运行规则变更后，按开发手册的文档维护矩阵同步文档
 
 ## Testing
 
@@ -27,12 +38,12 @@ Electron 桌面应用，主进程 (`src/main/`) + 渲染进程 (`src/renderer/`)
 - 修 bug 或加功能时，必须补对应测试到 `tests/unit/`；测试不通过就继续修代码直到通过
 - 注意：样式ui改动不需要写测试
 
-
-##  React 组件编写规范
+## React 组件编写规范
 
 ### 核心原则
 
 #### 1. 逻辑内聚，少传 props
+
 - **能写在组件内的逻辑就写在组件内**，不要通过 props 从父组件传进来
 - 事件处理、数据获取、状态管理，都优先写在组件自己里面
 
@@ -40,15 +51,20 @@ Electron 桌面应用，主进程 (`src/main/`) + 渲染进程 (`src/renderer/`)
 // ✅ 好
 function ProductCard({ id }) {
   const [count, setCount] = useState(0)
-  const handleBuy = () => { /* 逻辑写这里 */ }
+  const handleBuy = () => {
+    /* 逻辑写这里 */
+  }
   return <button onClick={handleBuy}>购买</button>
 }
 
 // ❌ 坏
-function ProductCard({ count, onBuy }) { /* 逻辑都从外面传 */ }
+function ProductCard({ count, onBuy }) {
+  /* 逻辑都从外面传 */
+}
 ```
 
 #### 2. 跨组件状态用 Zustand
+
 - 多个组件需要共享的数据 → 放 zustand store
 - 不要通过 props 一层层传
 
@@ -59,10 +75,11 @@ const useStore = create((set) => ({
 }))
 
 // 任何组件直接拿来用，不用传 props
-const user = useStore(state => state.user)
+const user = useStore((state) => state.user)
 ```
 
-####  3. 复用逻辑抽成自定义 Hook
+#### 3. 复用逻辑抽成自定义 Hook
+
 - 多个组件都需要**相同的有状态逻辑**时，抽成自定义 Hook
 - Hook 放在 `hooks/` 目录下，以 `use` 开头
 
@@ -71,11 +88,11 @@ const user = useStore(state => state.user)
 function useProductData(productId) {
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(false)
-  
+
   useEffect(() => {
     fetchProduct(productId).then(setProduct)
   }, [productId])
-  
+
   return { product, loading }
 }
 
@@ -87,16 +104,20 @@ function ProductCard({ id }) {
 ```
 
 #### 4. 什么情况才用 props？
+
 只传这两类东西：
+
 - **配置项**：`size`, `disabled`, `variant`
 - **纯展示数据**：`title`, `description`
 
 ## 简单检查
-写代码前问一句：*"这个逻辑/状态能不能直接写在当前组件里？"*
+
+写代码前问一句：_"这个逻辑/状态能不能直接写在当前组件里？"_
+
 - 能 → 就写里面
 - 不能，但多个组件都需要 → 放 zustand 或抽成自定义 Hook
 - 实在不行 → 才传 props
 
 ## 记住
-**组件要自己管自己，别当父组件的提线木偶。**
 
+**组件要自己管自己，别当父组件的提线木偶。**

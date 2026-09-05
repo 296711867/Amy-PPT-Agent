@@ -80,6 +80,8 @@ export async function prepareDeckImageAssets(args: {
   }) => void
 }): Promise<OutlineItem[]> {
   const resolvePageNumber = (index: number): number => args.pageNumbers?.[index] || index + 1
+  // 'none'：用户明确不需要额外配图（模板链路默认），既不生成也不挂占位图。
+  if (args.imagePolicy === 'none') return args.outlineItems
   const imagePages = args.outlineItems
     .map((item, index) => ({
       item,

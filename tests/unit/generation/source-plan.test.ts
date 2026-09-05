@@ -72,6 +72,7 @@ describe('source page skeleton planning', () => {
     expect(item).toMatchObject({
       contentStructure: 'sequence',
       moduleCount: 3,
+      visualFormat: 'diagram-flow',
       layoutId: 'three-cards-stack'
     })
   })
@@ -91,9 +92,15 @@ describe('source page skeleton planning', () => {
       }
     ])
 
-    expect(canUseSourcePlanDirectly({ sourcePlan, totalPages: 1, userMessage: '按文档生成' })).toBe(true)
-    expect(canUseSourcePlanDirectly({ sourcePlan, totalPages: 2, userMessage: '按文档生成' })).toBe(false)
-    expect(canUseSourcePlanDirectly({ sourcePlan, totalPages: 1, userMessage: '压缩成 1 页' })).toBe(false)
+    expect(canUseSourcePlanDirectly({ sourcePlan, totalPages: 1, userMessage: '按文档生成' })).toBe(
+      true
+    )
+    expect(canUseSourcePlanDirectly({ sourcePlan, totalPages: 2, userMessage: '按文档生成' })).toBe(
+      false
+    )
+    expect(
+      canUseSourcePlanDirectly({ sourcePlan, totalPages: 1, userMessage: '压缩成 1 页' })
+    ).toBe(false)
   })
 
   it('maps skeleton rows into range-bound outline items', () => {

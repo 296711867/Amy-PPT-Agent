@@ -1,10 +1,38 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildFailedDeckPage,
   buildDeckNarrativeReviewEventPayload,
   buildDeckQualityReviewEventPayload
 } from '../../../src/main/generation/deck-review-repair'
 
 describe('deck review session events', () => {
+  it('preserves planning metadata when a reviewed page is marked failed', () => {
+    const page = buildFailedDeckPage(
+      {
+        pageNumber: 2,
+        pageId: 'page-2',
+        title: '增长路径',
+        outline: '从现状推导三步增长路径',
+        layoutIntent: 'process',
+        visualFormat: 'process-diagram',
+        audienceMove: '理解现状 → 认同路径',
+        layoutId: 'process-horizontal',
+        layoutPrompt: 'horizontal process'
+      },
+      '/tmp/page-2.html',
+      'render failed'
+    )
+
+    expect(page).toMatchObject({
+      contentOutline: '从现状推导三步增长路径',
+      layoutIntent: 'process',
+      visualFormat: 'process-diagram',
+      audienceMove: '理解现状 → 认同路径',
+      layoutId: 'process-horizontal',
+      reason: 'render failed'
+    })
+  })
+
   it('builds a compact quality-review payload with deduped codes and repair outcome', () => {
     const payload = buildDeckQualityReviewEventPayload({
       available: true,

@@ -79,7 +79,10 @@ describe('PPTX animation browser scripts', () => {
     expect(HIDE_FOR_PPTX_BACKGROUND_SCRIPT).toContain('[data-pptx-has-before]::before')
     expect(HIDE_FOR_PPTX_BACKGROUND_SCRIPT).toContain('[data-pptx-has-after]::after')
     expect(HIDE_FOR_PPTX_BACKGROUND_SCRIPT).toContain(
-      "'[data-pptx-extracted-image] { opacity: 0 !important; visibility: hidden !important; }'"
+      "'[data-pptx-extracted-image]:not([data-pptx-static-background-image]) { opacity: 0 !important; visibility: hidden !important; }'"
+    )
+    expect(HIDE_FOR_PPTX_BACKGROUND_SCRIPT).toContain(
+      "el.setAttribute('data-pptx-static-background-image', '1')"
     )
     expect(HIDE_FOR_PPTX_BACKGROUND_SCRIPT).toContain('const horizontalTolerance = 2;')
     expect(HIDE_FOR_PPTX_BACKGROUND_SCRIPT).toContain('const verticalTolerance = 2;')

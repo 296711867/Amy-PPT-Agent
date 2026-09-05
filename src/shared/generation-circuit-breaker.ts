@@ -24,9 +24,9 @@ export function createGenerationCircuitBreaker(): {
       const occurrences =
         state.failure?.fingerprint === failure.fingerprint ? state.occurrences + 1 : 1
       state = {
-        // Stop dispatching new pages on the first system failure. A second concurrent
-        // occurrence confirms the fingerprint without sacrificing more queued pages.
-        paused: true,
+        // Transient provider failures need a matching second occurrence before they
+        // stop the deck. Auth, quota and storage failures are not useful to retry.
+        paused: !failure.retryable || occurrences >= 2,
         failure,
         occurrences
       }

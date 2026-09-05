@@ -47,11 +47,16 @@ function describeLayoutSkill(skillName: RequiredProductSkillName): string {
   return '非 16:9 画布 layout'
 }
 
-export function buildPageSemanticStructure(input: SlideSizePreset): string {
+export function buildPageSemanticStructure(
+  input: SlideSizePreset,
+  requireLayoutSkillRead = true
+): string {
   const layoutSkillName = resolveLayoutSkillName(input)
   return [
     '## 页面语义结构',
-    `- The layout source of truth for this canvas is the ${describeLayoutSkill(layoutSkillName)} skill ${layoutSkillName}. Before creating a slide, choosing a composition, or repairing overflow/collision: ${formatSkillUsageRequirement(layoutSkillName)}`,
+    requireLayoutSkillRead
+      ? `- The layout source of truth for this canvas is the ${describeLayoutSkill(layoutSkillName)} skill ${layoutSkillName}. Before creating a slide, choosing a composition, or repairing overflow/collision: ${formatSkillUsageRequirement(layoutSkillName)}`
+      : '- Template mode: the inspected target template page is the layout source of truth. Do not read a generic layout skill or choose a replacement composition.',
     `- 图标必须用 data-icon 引用（不要手写 path，不要用 emoji）：写 <svg data-icon="{id}" class="w-12 h-12 text-[#你的颜色]"/>，系统落盘时自动替换成统一 24×24 描边 lucide SVG（颜色靠 text-[] 配合 currentColor 跟随文字色）。${buildIconCatalogPrompt()}`,
     '- 写每页 HTML 前，先像设计师想三件事：① 这页的**焦点**是什么（观众先看哪）？② 其余元素怎么摆才**平衡**（视觉重量不偏一边、不堆一角）？③ 每处留白是**刻意的 framing 还是不小心的空缺**——不小心的空缺就重排。想清楚再写。',
     '- If the task is a tiny text/style edit that does not affect layout, do not read the full layout reference.',
@@ -124,7 +129,10 @@ export const STABLE_HTML_FRAGMENT_PROTOCOL = [
   '- 标签全部成对闭合、末尾完整——这是最常见的失败，写完自检每个 <div>/<section>/<ul>/<li>/<table>。'
 ].join('\n')
 
-export function buildCanvasConstraints(input: SlideSizePreset): string {
+export function buildCanvasConstraints(
+  input: SlideSizePreset,
+  requireLayoutSkillRead = true
+): string {
   const slideSize = requireSlideSize(input)
   const layoutSkillName = resolveLayoutSkillName(slideSize)
   const isPortrait = slideSize.height > slideSize.width
@@ -145,7 +153,9 @@ export function buildCanvasConstraints(input: SlideSizePreset): string {
 
   return [
     `## 画布与技法（${slideSize.label} / ${slideSize.width}×${slideSize.height}）`,
-    `- 版式细节（密度、pattern、高度预算、防重叠）在 ${describeLayoutSkill(layoutSkillName)} skill ${layoutSkillName}，写前先读：${formatSkillUsageRequirement(layoutSkillName)}`,
+    requireLayoutSkillRead
+      ? `- 版式细节（密度、pattern、高度预算、防重叠）在 ${describeLayoutSkill(layoutSkillName)} skill ${layoutSkillName}，写前先读：${formatSkillUsageRequirement(layoutSkillName)}`
+      : '- 模板模式直接沿用目标模板页的密度、空间预算与分区，不另读通用 layout skill，不重新选版式。',
     `- 根容器不带默认 padding，用 Tailwind grid/flex；背景可铺满 ${slideSize.width}×${slideSize.height}。内容区水平 padding 是版面留白的硬下限：不得低于画布宽度的 6%（当前画布 ${slideSize.width}px → 至少 ${minPadPx}px，对应 Tailwind px-${minPadTw} 或更大的值；任何 px-N 里 N 小于 ${minPadTw} 的水平 padding 都属违规，常见的 px-10/px-12/px-16/px-20 不允许出现在内容区根容器或主内容栏）。垂直方向同理，不得低于画布高度的 6%。如果存在 User Layout Profile，则其按画布计算的文字安全区优先，只有背景、满版图片和纯装饰可以越过安全区。写入前自检 padding class：低于下限必须放大 padding 或压缩内容，绝不靠贴边塞下更多模块。`,
     `- 已有内容在画布上占稳、对齐、按构图需要合理伸展，让版面协调——目标是平衡，不是把每寸塞满。对应逻辑画布宽 ${slideSize.width}px、高 ${slideSize.height}px；不为填满而新增卡片/注释/第二行模块，也不能溢出画布。`,
     ratioGuidance,
@@ -156,11 +166,16 @@ export function buildCanvasConstraints(input: SlideSizePreset): string {
   ].join('\n')
 }
 
-export function buildLayoutCollisionRules(input: SlideSizePreset): string {
+export function buildLayoutCollisionRules(
+  input: SlideSizePreset,
+  requireLayoutSkillRead = true
+): string {
   const layoutSkillName = resolveLayoutSkillName(input)
   return [
     '## 布局防重叠',
-    `- Full collision guide for this canvas is in the ${describeLayoutSkill(layoutSkillName)} skill ${layoutSkillName}. ${formatSkillUsageRequirement(layoutSkillName)}`,
+    requireLayoutSkillRead
+      ? `- Full collision guide for this canvas is in the ${describeLayoutSkill(layoutSkillName)} skill ${layoutSkillName}. ${formatSkillUsageRequirement(layoutSkillName)}`
+      : '- Template mode: preserve the inspected template positions and spacing; resolve collisions with local text shortening or small in-place adjustments.',
     '- 正文内容用 grid/flex 正常文档流。absolute/fixed 仅用于背景装饰、连接线。正文卡片不得用 absolute/fixed。'
   ].join('\n')
 }

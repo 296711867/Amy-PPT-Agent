@@ -78,4 +78,11 @@ describe('page writer slide size', () => {
     expect(html).not.toContain(`width: ${slideSize.width}px`)
     expect(html).not.toContain(`height: ${slideSize.height}px`)
   })
+
+  it('normalizes the common fade-in alias before generated HTML validation', () => {
+    const html = preprocessPageHtml('<div data-anim="fade-in">Content</div>')
+
+    expect(html).toContain('data-anim="fade"')
+    expect(html).not.toContain('data-anim="fade-in"')
+  })
 })

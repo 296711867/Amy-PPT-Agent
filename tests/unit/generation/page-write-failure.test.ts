@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildEmptyTurnContinuationMessage,
   buildPageNotWrittenMessage,
   extractHtmlFragmentCandidate,
-  extractWriteValidationFailure
+  extractWriteValidationFailure,
+  isModelEmptyTurn
 } from '../../../src/main/generation/page-write-failure'
 
 describe('extractWriteValidationFailure', () => {
@@ -124,5 +126,47 @@ describe('buildPageNotWrittenMessage', () => {
     expect(message).toContain('font-below-floor')
     expect(message).toContain('显式字号 14px')
     expect(message).toContain('必须修正下列问题后重新调用写盘工具')
+  })
+
+  it('blames the empty model turn instead of "tool not called" when the model went silent', () => {
+    // GLM-5.x 空回合：整轮只有思考、没有正文也没有任何工具调用。
+    // 文案必须指向空回合，否则重试提示词会把方向带偏成「模型没调工具」。
+    const message = buildPageNotWrittenMessage({
+      pageId: 'page-1',
+      writeToolName: 'update_single_page_file',
+      lastWriteValidationFailure: '',
+      modelReturnedEmptyTurn: true
+    })
+    expect(message).toContain('模型连续返回空回合')
+    expect(message).toContain('update_single_page_file')
+    expect(message).not.toContain('模型没有成功调用')
+  })
+})
+
+describe('isModelEmptyTurn', () => {
+  it('marks a turn with no tool calls and no text as empty', () => {
+    expect(isModelEmptyTurn({ sawToolCall: false, finalAssistantText: '' })).toBe(true)
+    expect(isModelEmptyTurn({ sawToolCall: false, finalAssistantText: '   \n ' })).toBe(true)
+  })
+
+  it('does not mark turns that produced text or called any tool', () => {
+    // 有正文：最终回复救援/错误文案还有内容可依据
+    expect(isModelEmptyTurn({ sawToolCall: false, finalAssistantText: '我完成了' })).toBe(false)
+    // 有工具调用（含写盘被校验拒绝后重试的情况）：不是空回合
+    expect(isModelEmptyTurn({ sawToolCall: true, finalAssistantText: '' })).toBe(false)
+  })
+})
+
+describe('buildEmptyTurnContinuationMessage', () => {
+  it('instructs the same agent session to call the write tool immediately', () => {
+    const message = buildEmptyTurnContinuationMessage({
+      pageId: 'page-7t5tdo7arv',
+      writeToolName: 'update_single_page_file',
+      continuationRound: 1
+    })
+    expect(message).toContain('continuation 1')
+    expect(message).toContain('update_single_page_file(pageId="page-7t5tdo7arv"')
+    expect(message).toContain('without calling any tool')
+    expect(message).not.toContain('page-别的页')
   })
 })

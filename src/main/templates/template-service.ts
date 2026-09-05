@@ -9,6 +9,7 @@ import { buildProjectIndexHtml, type DeckPageFile } from '../session/template-bu
 import { buildDesignContractWithLLM } from '../generation/agent-runner'
 import { parseJsonObject } from '../ipc/utils'
 import { normalizeSourcePlan } from '../generation/source-plan'
+import { normalizeImagePolicy } from '@shared/generation'
 import { importPptxToEditableHtml, type PptxImportProgressPayload } from '../io/pptx-import'
 import { createPptxChartRewriteHandler } from '../io/pptx-import/chart-rewrite-agent'
 import { extractStyleFromExistingHtml } from '../styles/import/pptx'
@@ -20,6 +21,7 @@ import { scopeModelRuntimeToSession } from '../agent-runtime/model'
 import { captureTemplateCoverThumbnail, warmTemplateCoverThumbnails } from './template-thumbnail'
 import { copyDirExcluding } from './template-copy'
 import { resolveTemplateDesignContract } from './template-design-contract'
+import { createTemplateSeedFingerprint } from './template-seed-fingerprint'
 import {
   manifestToListItem,
   parseTemplateManifest,
@@ -55,6 +57,8 @@ type PreparedTemplatePage = {
   htmlPath: string
   sourceTemplatePageNumber: number
   sourceTemplatePageRole: TemplatePageRole
+  /** 落盘种子 HTML 的指纹；恢复逻辑用它识别“从未被生成改写”的模板页。 */
+  seedFingerprint: string
 }
 
 const templateManifestCache = new LRUCache<string, CacheValue>({
@@ -275,13 +279,10 @@ async function prepareTemplatePagesForSession(args: {
     const relativeHtmlPath = `${pageId}.html`
     const targetPath = path.resolve(args.projectDir, relativeHtmlPath)
     const html = await fs.promises.readFile(sourcePath, 'utf-8')
-    await fs.promises.writeFile(
-      targetPath,
-      ensureMasterStyleLink(
-        rewriteTemplatePageIdentities(html, sourceIdToFirstTargetId, sourcePage.pageId, pageId)
-      ),
-      'utf-8'
+    const targetHtml = ensureMasterStyleLink(
+      rewriteTemplatePageIdentities(html, sourceIdToFirstTargetId, sourcePage.pageId, pageId)
     )
+    await fs.promises.writeFile(targetPath, targetHtml, 'utf-8')
     usedTargetPaths.add(path.relative(args.projectDir, targetPath).replace(/\\/g, '/'))
     preparedPages.push({
       id: item.id,
@@ -290,7 +291,8 @@ async function prepareTemplatePagesForSession(args: {
       title: `第 ${pageNumber} 页`,
       htmlPath: targetPath,
       sourceTemplatePageNumber: sourcePage.pageNumber,
-      sourceTemplatePageRole: sourcePage.role
+      sourceTemplatePageRole: sourcePage.role,
+      seedFingerprint: createTemplateSeedFingerprint(targetHtml)
     })
   }
 
@@ -687,6 +689,16 @@ export async function createSessionFromTemplate(
   const referenceDocumentPath =
     typeof record.referenceDocumentPath === 'string' ? record.referenceDocumentPath.trim() : ''
   const sourcePlan = normalizeSourcePlan(record.sourcePlan)
+  // 大纲/指令在创建时就落库：取消生成、重启应用或从会话列表重进时，
+  // 生成页可以从会话元数据恢复 initialPrompt，而不是只依赖路由 state。
+  const rawInitialPrompt =
+    typeof record.initialPrompt === 'string' ? record.initialPrompt.trim() : ''
+  const initialPrompt = rawInitialPrompt.slice(0, 24000)
+  // 模板链路的视觉事实来源是模板页基底；默认 'none' 表示不额外配图，
+  // 用户明确选择占位图或 AI 配图时才注入对应策略。
+  const imagePolicy = record.imagePolicy
+    ? normalizeImagePolicy(record.imagePolicy)
+    : ('none' as const)
 
   const templatesRoot = await ensureTemplatesRoot()
   const { manifest, templateDir } = await readManifest(templatesRoot, templateId)
@@ -797,6 +809,12 @@ export async function createSessionFromTemplate(
     createdFromTemplateAt: Date.now(),
     indexPath,
     projectId,
+    imagePolicy,
+    ...(initialPrompt ? { templateInitialPrompt: initialPrompt } : {}),
+    // 种子页指纹：恢复逻辑据此跳过“从未被生成改写”的模板页（I-15 盲区）。
+    templateSeedFingerprints: Object.fromEntries(
+      preparedPages.map((page) => [page.pageId, page.seedFingerprint])
+    ),
     // 每个输出页的模板基底语义角色，供模板生成链路注入页面级提示词。
     templateBaseRoles: Object.fromEntries(
       preparedPages.map((page) => [page.pageId, page.sourceTemplatePageRole])

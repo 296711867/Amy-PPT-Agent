@@ -65,6 +65,7 @@ export type GenerationDbPort = Pick<
   | 'getActiveImageModelConfig'
   | 'getAllSettings'
   | 'getGenerationRun'
+  | 'getLatestGenerationRun'
   | 'getLatestSessionJob'
   | 'getModelConfig'
   | 'getOrCreateSessionStyleSnapshot'

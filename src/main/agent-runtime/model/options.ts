@@ -14,7 +14,14 @@ export interface OpenAIModelOptionsInput {
   thinkingParameterMode?: ThinkingParameterMode
 }
 
-export const shouldDisableOpenAICompatibleThinking = (baseUrl: string): boolean => {
+// GLM-5.x 起官方不再支持关闭思考：thinking.type=disabled 属于未定义行为，
+// coding 端点上实测会随机返回「只有思考、无正文、无 tool_calls」的空回合，
+// 直接表现为页面生成的「页面未写入」。对这类模型一律不发 thinking 参数。
+const ALWAYS_THINKING_MODEL_RE = /^glm[-_]?([5-9]|[1-9]\d)/i
+
+export const shouldDisableOpenAICompatibleThinking = (baseUrl: string, model?: string): boolean => {
+  if (ALWAYS_THINKING_MODEL_RE.test((model || '').trim())) return false
+
   const resolvedBaseUrl = baseUrl.trim()
   if (!resolvedBaseUrl) return false
 
@@ -34,10 +41,12 @@ export const normalizeOpenAIBaseUrl = (baseUrl: string, useResponsesApi = false)
 
 export const resolveOpenAIThinkingModelKwargs = ({
   baseUrl,
+  model,
   useResponsesApi = false,
   thinkingParameterMode = DEFAULT_THINKING_PARAMETER_MODE
 }: {
   baseUrl: string
+  model?: string
   useResponsesApi?: boolean
   thinkingParameterMode?: ThinkingParameterMode
 }): Record<string, unknown> => {
@@ -46,7 +55,9 @@ export const resolveOpenAIThinkingModelKwargs = ({
   const mode = normalizeThinkingParameterMode(thinkingParameterMode)
   if (mode === 'omit') return {}
 
-  return shouldDisableOpenAICompatibleThinking(baseUrl) ? { thinking: { type: 'disabled' } } : {}
+  return shouldDisableOpenAICompatibleThinking(baseUrl, model)
+    ? { thinking: { type: 'disabled' } }
+    : {}
 }
 
 export const buildOpenAIModelOptions = ({
@@ -61,6 +72,7 @@ export const buildOpenAIModelOptions = ({
   const resolvedBaseUrl = normalizeOpenAIBaseUrl(baseUrl, useResponsesApi)
   const modelKwargs = resolveOpenAIThinkingModelKwargs({
     baseUrl: resolvedBaseUrl,
+    model,
     useResponsesApi,
     thinkingParameterMode
   })

@@ -110,4 +110,54 @@ describe('buildOpenAIModelOptions', () => {
       })
     ).toEqual({})
   })
+
+  it.each([
+    'glm-5.2',
+    'GLM-5.2',
+    'glm-5.3',
+    'GLM-5',
+    'glm-6',
+    'glm_5_air',
+    'glm-10'
+  ])(
+    'never sends thinking:disabled to always-thinking GLM models on any host: %s',
+    (model) => {
+      // GLM-5.x 起官方不再支持关闭思考；coding 端点收到 thinking.type=disabled
+      // 会随机返回「只有思考、无正文、无 tool_calls」的空回合，直接表现为
+      // 页面生成的「页面未写入」。
+      expect(
+        buildOpenAIModelOptions({
+          model,
+          apiKey: 'secret',
+          baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+          temperatureOptions: {},
+          maxTokens: 32768
+        }).modelKwargs
+      ).toEqual({})
+      expect(
+        buildOpenAIModelOptions({
+          model,
+          apiKey: 'secret',
+          baseUrl: 'https://proxy.example.com/v1',
+          temperatureOptions: {},
+          maxTokens: 32768
+        }).modelKwargs
+      ).toEqual({})
+    }
+  )
+
+  it.each(['glm-4.6', 'GLM-4.5', 'glm-4-plus'])(
+    'keeps thinking:disabled for GLM-4.x models that support it: %s',
+    (model) => {
+      expect(
+        buildOpenAIModelOptions({
+          model,
+          apiKey: 'secret',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+          temperatureOptions: {},
+          maxTokens: 8192
+        }).modelKwargs
+      ).toEqual({ thinking: { type: 'disabled' } })
+    }
+  )
 })

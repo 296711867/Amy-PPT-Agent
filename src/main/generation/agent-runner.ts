@@ -167,7 +167,7 @@ export const runDeepAgentDeckGeneration = async (
             const failure = classifyGenerationError(error)
             if (failure.scope === 'system') {
               const circuitState = circuitBreaker.registerFailure(failure)
-              log.error('[deepagent] system failure opened page generation circuit', {
+              const circuitLog = {
                 sessionId: args.sessionId,
                 provider: args.provider,
                 model: args.model,
@@ -175,7 +175,12 @@ export const runDeepAgentDeckGeneration = async (
                 code: failure.code,
                 fingerprint: failure.fingerprint,
                 occurrences: circuitState.occurrences
-              })
+              }
+              if (circuitState.paused) {
+                log.error('[deepagent] system failure opened page generation circuit', circuitLog)
+              } else {
+                log.warn('[deepagent] transient system failure registered', circuitLog)
+              }
             }
             args.emit?.({
               type: 'page_failed',
@@ -199,6 +204,8 @@ export const runDeepAgentDeckGeneration = async (
               title: page.title,
               contentOutline: page.outline,
               layoutIntent: page.layoutIntent,
+              visualFormat: page.visualFormat,
+              audienceMove: page.audienceMove,
               layoutId: page.layoutId,
               imageAssetPath: page.imageAssetPath,
               imageAssetPaths: page.imageAssetPaths,
@@ -231,6 +238,48 @@ export const runDeepAgentDeckGeneration = async (
       })
     }
   })
+  const circuitState = circuitBreaker.getState()
+  const circuitSkippedPages = circuitState.paused
+    ? pageRefs.filter((page) => !dispatchedPageIds.has(page.pageId))
+    : []
+  for (const page of circuitSkippedPages) {
+    const reason = uiText(
+      args.appLocale,
+      '生成被熔断跳过',
+      'Generation skipped because the circuit breaker opened'
+    )
+    failedPages.push({ pageId: page.pageId, title: page.title, reason })
+    args.emit?.({
+      type: 'page_failed',
+      payload: {
+        runId: args.runId || '',
+        stage: 'rendering',
+        label: progressText(args.appLocale, 'failed'),
+        progress: progress.getOverallRenderProgress(),
+        currentPage: page.pageNumber,
+        totalPages,
+        pageNumber: page.pageNumber,
+        pageId: page.pageId,
+        title: page.title,
+        htmlPath: args.pageFileMap[page.pageId] || '',
+        error: reason
+      }
+    })
+    await args.onPageFailed?.({
+      pageNumber: page.pageNumber,
+      pageId: page.pageId,
+      title: page.title,
+      contentOutline: page.outline,
+      layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
+      layoutId: page.layoutId,
+      imageAssetPath: page.imageAssetPath,
+      imageAssetPaths: page.imageAssetPaths,
+      htmlPath: args.pageFileMap[page.pageId] || '',
+      reason
+    })
+  }
   const { deckQualityWarnings, deckNarrativeWarnings } = await runDeckReviewAndRepair({
     args,
     pageRefs,
@@ -240,9 +289,12 @@ export const runDeepAgentDeckGeneration = async (
     circuitPaused: circuitBreaker.getState().paused
   })
   const pendingPages = pageRefs
-    .filter((page) => !dispatchedPageIds.has(page.pageId))
+    .filter(
+      (page) =>
+        !dispatchedPageIds.has(page.pageId) &&
+        !failedPages.some((failure) => failure.pageId === page.pageId)
+    )
     .map((page) => ({ pageId: page.pageId, title: page.title }))
-  const circuitState = circuitBreaker.getState()
   const finalAssistantText = pageRefs
     .map((page) => pageSummaryMap.get(page.pageNumber))
     .filter((item): item is string => Boolean(item))

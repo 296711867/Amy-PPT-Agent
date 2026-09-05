@@ -124,6 +124,8 @@ export interface GenerationPageRecord {
   title: string
   content_outline: string | null
   layout_intent: string | null
+  visual_format: string | null
+  audience_move: string | null
   layout_id: string | null
   image_asset_path: string | null
   image_asset_paths: string[]

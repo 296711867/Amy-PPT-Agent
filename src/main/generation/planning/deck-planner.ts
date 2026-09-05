@@ -5,10 +5,7 @@ import {
   runWithModelTemperatureControl,
   type ModelRuntimeConfig
 } from '../../agent-runtime/model'
-import {
-  buildPlanningSystemPrompt,
-  buildPlanningUserPrompt
-} from '../../agent-runtime/prompt'
+import { buildPlanningSystemPrompt, buildPlanningUserPrompt } from '../../agent-runtime/prompt'
 import type { GenerateChunkEvent, ImagePolicy, OutlineItem } from '@shared/generation'
 import { resolvePlannedVisualFormat } from '@shared/generation'
 import { normalizeLayoutIntent } from '@shared/layout-intent'
@@ -25,6 +22,7 @@ import type { GenerationModelControl } from '../context'
 import {
   normalizeAudienceMove,
   normalizeOutlineEntries,
+  outlineEntryToPromptText,
   normalizeOutlineText
 } from '../outline-normalizer'
 import { parseModelJson } from './model-response'
@@ -34,10 +32,8 @@ type AppLocale = 'zh' | 'en'
 const uiText = (locale: AppLocale | undefined, zh: string, en: string): string =>
   locale === 'en' ? en : zh
 
-const withModelControl = <T>(
-  modelControl: GenerationModelControl | undefined,
-  task: () => T
-): T => (modelControl ? runWithModelTemperatureControl(modelControl, task) : task())
+const withModelControl = <T>(modelControl: GenerationModelControl | undefined, task: () => T): T =>
+  modelControl ? runWithModelTemperatureControl(modelControl, task) : task()
 
 const modelCallSignal = (
   timeoutMs: unknown,
@@ -60,7 +56,8 @@ const buildPlanningRetryUserPrompt = (
     `- The previous planning response failed validation: ${previousError}`,
     `- Retry now and return exactly ${totalPages} items.`,
     '- Return only a raw JSON array. Do not wrap it in Markdown. Do not add explanations.',
-    '- Each item must have exactly these fields: title, keyPoints, layoutIntent, contentStructure, moduleCount, visualAspect, contentDensity, layoutId.',
+    '- Each item must have exactly these fields: title, keyPoints, layoutIntent, visualFormat, audienceMove, contentStructure, moduleCount, visualAspect, contentDensity, layoutId.',
+    '- visualFormat and audienceMove are required. audienceMove must be one concise "before → after" transition.',
     '- layoutId must be a universal layout catalog ID or null.',
     '- keyPoints must be an array with 1-10 short strings.'
   ].join('\n')
@@ -131,7 +128,7 @@ export const planDeckWithLLM = async (args: {
     const items: OutlineItem[] = (parsed as Array<Record<string, unknown>>).map((item, index) => {
       const title = String(item.title ?? '').trim()
       const structuredEntries = normalizeOutlineEntries(item.keyPoints)
-      const keyPoints = structuredEntries.map((entry) => entry.label)
+      const keyPoints = structuredEntries.map(outlineEntryToPromptText)
       const requestedModuleCount = Number(item.moduleCount)
       const moduleCount = Number.isFinite(requestedModuleCount)
         ? Math.max(1, Math.min(6, Math.floor(requestedModuleCount)))
@@ -157,6 +154,24 @@ export const planDeckWithLLM = async (args: {
             args.appLocale,
             `LLM plan_deck 第 ${index + 1} 项 keyPoints 为空，至少需要 1 条。`,
             `LLM plan_deck item ${index + 1} has empty keyPoints; at least one item is required.`
+          )
+        )
+      }
+      if (!visualFormat) {
+        throw new Error(
+          uiText(
+            args.appLocale,
+            `LLM plan_deck 第 ${index + 1} 页缺少可执行的 visualFormat。`,
+            `LLM plan_deck item ${index + 1} is missing an actionable visualFormat.`
+          )
+        )
+      }
+      if (!audienceMove || !audienceMove.includes('→')) {
+        throw new Error(
+          uiText(
+            args.appLocale,
+            `LLM plan_deck 第 ${index + 1} 页缺少有效的 audienceMove（before → after）。`,
+            `LLM plan_deck item ${index + 1} is missing a valid audienceMove (before → after).`
           )
         )
       }
@@ -191,15 +206,16 @@ export const planDeckWithLLM = async (args: {
         )
       )
     }
-    // Pad if LLM returned fewer pages than requested
-    while (items.length < args.totalPages) {
-      items.push({
-        title: uiText(args.appLocale, `第 ${items.length + 1} 页`, `Page ${items.length + 1}`),
-        contentOutline: '',
-        layoutIntent: 'concept'
-      })
+    if (items.length !== args.totalPages) {
+      throw new Error(
+        uiText(
+          args.appLocale,
+          `LLM plan_deck 返回 ${items.length} 页，但要求精确返回 ${args.totalPages} 页。`,
+          `LLM plan_deck returned ${items.length} slides but exactly ${args.totalPages} are required.`
+        )
+      )
     }
-    return diversifyUniversalLayoutSequence(items.slice(0, args.totalPages))
+    return diversifyUniversalLayoutSequence(items)
   }
 
   args.emit?.({
@@ -308,4 +324,3 @@ export const planDeckWithLLM = async (args: {
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Planning failed'))
 }
-

@@ -191,10 +191,10 @@ export function buildDeckAgentSystemPrompt(
       contentLanguageRules: CONTENT_LANGUAGE_RULES,
       templateOrCreativeInstructions,
       sourceDocumentInstructions,
-      canvasConstraints: buildCanvasConstraints(context.slideSize),
-      layoutCollisionRules: buildLayoutCollisionRules(context.slideSize),
+      canvasConstraints: buildCanvasConstraints(context.slideSize, !isTemplateGeneration),
+      layoutCollisionRules: buildLayoutCollisionRules(context.slideSize, !isTemplateGeneration),
       canvasScenarioDeliveryGuard: buildCanvasScenarioDeliveryGuard(context.slideSize),
-      pageSemanticStructure: buildPageSemanticStructure(context.slideSize),
+      pageSemanticStructure: buildPageSemanticStructure(context.slideSize, !isTemplateGeneration),
       canvasScenarioExpansionRules: buildCanvasScenarioExpansionRules(context.slideSize),
       frontendCapabilities: FRONTEND_CAPABILITIES,
       animationPreferencePromptWithSpacing: animationPreferencePrompt

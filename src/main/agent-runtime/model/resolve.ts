@@ -48,6 +48,7 @@ export function resolveModel(
     provider === 'openai' || provider === 'openai-responses'
       ? resolveOpenAIThinkingModelKwargs({
           baseUrl: normalizeOpenAIBaseUrl(resolvedBaseUrl, useOpenAIResponsesApi),
+          model: resolvedModel,
           useResponsesApi: useOpenAIResponsesApi,
           thinkingParameterMode
         })

@@ -43,6 +43,8 @@ export type GenerationPageCreateData = {
   title: string
   contentOutline?: string | null
   layoutIntent?: string | null
+  visualFormat?: string | null
+  audienceMove?: string | null
   layoutId?: string | null
   imageAssetPath?: string | null
   imageAssetPaths?: string[] | null
@@ -60,6 +62,8 @@ export interface UpsertGenerationPageInput {
   title: string
   contentOutline?: string | null
   layoutIntent?: string | null
+  visualFormat?: string | null
+  audienceMove?: string | null
   layoutId?: string | null
   imageAssetPath?: string | null
   imageAssetPaths?: string[] | null
@@ -166,6 +170,14 @@ const normalizeGenerationPageRow = (row: Record<string, unknown>): GenerationPag
     layout_intent:
       typeof (row.layoutIntent ?? row.layout_intent) === 'string'
         ? String(row.layoutIntent ?? row.layout_intent)
+        : null,
+    visual_format:
+      typeof (row.visualFormat ?? row.visual_format) === 'string'
+        ? String(row.visualFormat ?? row.visual_format)
+        : null,
+    audience_move:
+      typeof (row.audienceMove ?? row.audience_move) === 'string'
+        ? String(row.audienceMove ?? row.audience_move)
         : null,
     layout_id:
       typeof (row.layoutId ?? row.layout_id) === 'string'
@@ -324,6 +336,8 @@ export class GenerationRunRepository {
           title: page.title,
           contentOutline: page.contentOutline || null,
           layoutIntent: page.layoutIntent || null,
+          visualFormat: page.visualFormat || null,
+          audienceMove: page.audienceMove || null,
           layoutId: page.layoutId || null,
           imageAssetPath: page.imageAssetPath || null,
           imageAssetPaths: page.imageAssetPaths?.length
@@ -472,6 +486,8 @@ export class GenerationRunRepository {
       title: data.title,
       contentOutline: data.contentOutline || null,
       layoutIntent: data.layoutIntent || null,
+      visualFormat: data.visualFormat || null,
+      audienceMove: data.audienceMove || null,
       layoutId: data.layoutId || null,
       imageAssetPath: data.imageAssetPath || null,
       imageAssetPaths: data.imageAssetPaths?.length ? JSON.stringify(data.imageAssetPaths) : null,
@@ -492,6 +508,8 @@ export class GenerationRunRepository {
           title: values.title,
           contentOutline: values.contentOutline,
           layoutIntent: values.layoutIntent,
+          visualFormat: values.visualFormat,
+          audienceMove: values.audienceMove,
           layoutId: values.layoutId,
           imageAssetPath: values.imageAssetPath,
           imageAssetPaths: values.imageAssetPaths,

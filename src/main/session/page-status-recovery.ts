@@ -11,6 +11,16 @@ export const isRecoverableSessionPageStatus = (page: SessionPageRecord): boolean
   return RECOVERABLE_FAILURE_RE.test(String(page.error || '').trim())
 }
 
+/**
+ * 恢复只针对“生成进行中被中断”的页面。
+ * 从模板创建的会话在首次生成前就有 pending + 已落盘的模板页，属于设计而非中断，
+ * 不能被恢复成 completed（否则整套生成会被误判为已完成而跳过）。
+ */
+export const shouldRecoverSessionPages = (args: {
+  hasActiveRun: boolean
+  hasGenerationHistory: boolean
+}): boolean => args.hasGenerationHistory && !args.hasActiveRun
+
 export const hasCompleteSessionPageCoverage = (
   pages: SessionPageRecord[],
   expectedPageCount: number
@@ -30,6 +40,11 @@ export async function recoverUsableSessionPages(args: {
   sessionId: string
   pages: SessionPageRecord[]
   resolveHtmlPath(page: SessionPageRecord): string
+  /**
+   * 模板会话的种子页识别：HTML 仍是创建时落盘的模板基底（指纹一致），
+   * 说明该页从未被生成改写——即使存在 run 历史也不能"恢复"成 completed。
+   */
+  isUntouchedSeed?(page: SessionPageRecord, html: string): boolean
 }): Promise<{ pages: SessionPageRecord[]; recoveredPageIds: string[] }> {
   const recoveredPageIds: string[] = []
   const pages: SessionPageRecord[] = []
@@ -45,6 +60,11 @@ export async function recoverUsableSessionPages(args: {
     try {
       html = await fs.promises.readFile(htmlPath, 'utf-8')
     } catch {
+      pages.push(page)
+      continue
+    }
+
+    if (args.isUntouchedSeed?.(page, html)) {
       pages.push(page)
       continue
     }

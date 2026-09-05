@@ -24,6 +24,7 @@ import { runDeepAgentEdit } from './agent-runner'
 import { formatSelectedElementRuntimeContext } from '../agent-runtime/prompt/selected-element-context'
 import {
   type DesignContract,
+  normalizeVisualFormat,
   SESSION_PAGE_EDIT_INTENTS,
   type GeneratedPagePayload,
   type SessionPageEditAssessment,
@@ -519,6 +520,12 @@ export async function executeEditGeneration(
   const layoutIdByPageId = new Map(
     latestPageSnapshot.map((page) => [page.page_id, normalizeUniversalLayoutId(page.layout_id)])
   )
+  const visualFormatByPageId = new Map(
+    latestPageSnapshot.map((page) => [page.page_id, normalizeVisualFormat(page.visual_format)])
+  )
+  const audienceMoveByPageId = new Map(
+    latestPageSnapshot.map((page) => [page.page_id, page.audience_move || undefined])
+  )
   const imageAssetPathByPageId = new Map(
     latestPageSnapshot.map((page) => [page.page_id, page.image_asset_path || undefined])
   )
@@ -529,6 +536,8 @@ export async function executeEditGeneration(
     title: ref.title,
     contentOutline: outlineByPageId.get(ref.pageId) || '',
     layoutIntent: layoutIntentByPageId.get(ref.pageId),
+    visualFormat: visualFormatByPageId.get(ref.pageId),
+    audienceMove: audienceMoveByPageId.get(ref.pageId),
     layoutId: layoutIdByPageId.get(ref.pageId),
     imageAssetPath: imageAssetPathByPageId.get(ref.pageId),
     imageAssetPaths: imageAssetPathsByPageId.get(ref.pageId)
@@ -917,6 +926,8 @@ export async function executeEditGeneration(
       title: page.title,
       contentOutline: outlineItem?.contentOutline || '',
       layoutIntent: outlineItem?.layoutIntent,
+      visualFormat: outlineItem?.visualFormat,
+      audienceMove: outlineItem?.audienceMove,
       layoutId: outlineItem?.layoutId,
       imageAssetPath: outlineItem?.imageAssetPath,
       imageAssetPaths: outlineItem?.imageAssetPaths,

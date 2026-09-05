@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { ipc, type TemplateListItem } from '@renderer/lib/ipc'
-import type { SourceDocumentPlan } from '@shared/generation'
+import type { ImagePolicy, SourceDocumentPlan } from '@shared/generation'
 
 interface TemplateStore {
   templates: TemplateListItem[]
@@ -20,6 +20,8 @@ interface TemplateStore {
     pageCount?: number
     referenceDocumentPath?: string
     sourcePlan?: SourceDocumentPlan
+    initialPrompt?: string
+    imagePolicy?: ImagePolicy
   }) => Promise<string>
   createEditableSessionFromTemplate: (payload: {
     templateId: string

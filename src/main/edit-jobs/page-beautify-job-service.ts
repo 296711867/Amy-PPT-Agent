@@ -49,6 +49,11 @@ type PageBeautifyTarget = {
   pageNumber: number
   title: string
   htmlPath: string
+  contentOutline: string
+  layoutIntent?: string
+  visualFormat?: string
+  audienceMove?: string
+  layoutId?: string
 }
 
 type PageBeautifyContext = {
@@ -212,16 +217,25 @@ async function resolvePageBeautifyContext(
     layoutAudit?: string
   }
 ): Promise<PageBeautifyContext> {
-  const [session, project, pages, activeModel, modelTimeouts, styleSnapshot, settings] =
-    await Promise.all([
-      ctx.db.getSession(args.sessionId),
-      ctx.db.getProject(args.sessionId),
-      ctx.db.listSessionPages(args.sessionId),
-      resolveModelConfigForTask(ctx, { modelConfigId: args.modelConfigId, purpose: 'generation' }),
-      resolveGlobalModelTimeouts(ctx),
-      ctx.db.getOrCreateSessionStyleSnapshot(args.sessionId),
-      ctx.db.getAllSettings()
-    ])
+  const [
+    session,
+    project,
+    pages,
+    latestPages,
+    activeModel,
+    modelTimeouts,
+    styleSnapshot,
+    settings
+  ] = await Promise.all([
+    ctx.db.getSession(args.sessionId),
+    ctx.db.getProject(args.sessionId),
+    ctx.db.listSessionPages(args.sessionId),
+    ctx.db.listLatestGenerationPageSnapshot?.(args.sessionId) ?? Promise.resolve([]),
+    resolveModelConfigForTask(ctx, { modelConfigId: args.modelConfigId, purpose: 'generation' }),
+    resolveGlobalModelTimeouts(ctx),
+    ctx.db.getOrCreateSessionStyleSnapshot(args.sessionId),
+    ctx.db.getAllSettings()
+  ])
   if (!session) throw new Error('Session not found')
   if (!project) throw new Error('一键美化的页面项目不存在')
   if (!activeModel.apiKey) {
@@ -232,6 +246,7 @@ async function resolvePageBeautifyContext(
     (item) => item.id === args.selectedPageId || item.file_slug === args.selectedPageId
   )
   if (!page) throw new Error('一键美化的目标页面不存在')
+  const latestPage = latestPages.find((item) => item.page_id === page.file_slug)
   const projectDir = await ctx.resolveSessionProjectDir(args.sessionId)
   const htmlPath = resolvePageHtmlPath({
     projectDir,
@@ -293,7 +308,12 @@ async function resolvePageBeautifyContext(
       pageId: page.file_slug,
       pageNumber: page.page_number,
       title: page.title || `第${page.page_number}页`,
-      htmlPath
+      htmlPath,
+      contentOutline: latestPage?.content_outline || '',
+      layoutIntent: latestPage?.layout_intent || undefined,
+      visualFormat: latestPage?.visual_format || undefined,
+      audienceMove: latestPage?.audience_move || undefined,
+      layoutId: latestPage?.layout_id || undefined
     },
     designContract: parseDesignContract(sessionRecord)
   }
@@ -312,7 +332,10 @@ export class PageBeautifyJobService {
   private activeJobs = new Map<string, ActivePageBeautifyJob>()
   private reservedJobIds = new Map<string, string>()
 
-  constructor(private ctx: IpcContext, private coordinator: JobCoordinator) {}
+  constructor(
+    private ctx: IpcContext,
+    private coordinator: JobCoordinator
+  ) {}
 
   async start(
     _event: Electron.IpcMainInvokeEvent,
@@ -325,7 +348,9 @@ export class PageBeautifyJobService {
     const modelConfigId =
       typeof input.modelConfigId === 'string' ? input.modelConfigId.trim() || undefined : undefined
     const layoutAudit =
-      typeof input.layoutAudit === 'string' ? input.layoutAudit.trim().slice(0, 6000) || undefined : undefined
+      typeof input.layoutAudit === 'string'
+        ? input.layoutAudit.trim().slice(0, 6000) || undefined
+        : undefined
     if (!sessionId) throw new Error('sessionId 不能为空')
     if (!selectedPageId) throw new Error('一键美化缺少当前页面')
 
@@ -412,8 +437,7 @@ export class PageBeautifyJobService {
       void this.run(job)
       return { success: true, runId: context.runId }
     } catch (error) {
-      if (context && jobCreated)
-        await this.settleFailure(context, error, lease.signal.aborted)
+      if (context && jobCreated) await this.settleFailure(context, error, lease.signal.aborted)
       if (context && !jobCreated) {
         await this.ctx.db.updateSessionStatus(
           context.sessionId,
@@ -513,7 +537,11 @@ export class PageBeautifyJobService {
         ? (safeParseJson(run.metadata) as { outcome?: 'changed' | 'unchanged' } | null)
         : null
     const outcome =
-      status === 'completed' ? (runMetadata?.outcome === 'unchanged' ? 'unchanged' : 'changed') : null
+      status === 'completed'
+        ? runMetadata?.outcome === 'unchanged'
+          ? 'unchanged'
+          : 'changed'
+        : null
     return {
       sessionId,
       runId: job.id,
@@ -734,7 +762,10 @@ export class PageBeautifyJobService {
           })
           if (
             candidate.content.trim() !== originalFragment.trim() &&
-            !hasMeaningfulPageBeautifyChange(originalFragment, extractPageBeautifyContent(candidate.html))
+            !hasMeaningfulPageBeautifyChange(
+              originalFragment,
+              extractPageBeautifyContent(candidate.html)
+            )
           ) {
             throw new Error(
               '未检测到有效的布局改版。不要只修改文字、数字、注释、动画或 data 属性；请重构排版并自行审查版式。'
@@ -754,9 +785,7 @@ export class PageBeautifyJobService {
             payload: {
               runId: job.runId,
               stage: 'editing',
-              label: isEn
-                ? 'Correcting page from validation feedback'
-                : '正在根据审核反馈修正页面',
+              label: isEn ? 'Correcting page from validation feedback' : '正在根据审核反馈修正页面',
               progress: 45,
               totalPages: 1,
               provider: job.context.provider,
@@ -865,7 +894,11 @@ export class PageBeautifyJobService {
         pageId: job.targetPageId,
         pageNumber: job.targetPageNumber,
         title: job.context.target.title,
-        contentOutline: '',
+        contentOutline: job.context.target.contentOutline,
+        layoutIntent: job.context.target.layoutIntent,
+        visualFormat: job.context.target.visualFormat,
+        audienceMove: job.context.target.audienceMove,
+        layoutId: job.context.target.layoutId,
         htmlPath: job.targetPagePath,
         status: 'completed'
       })

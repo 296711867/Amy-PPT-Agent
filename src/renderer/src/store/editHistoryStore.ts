@@ -115,50 +115,12 @@ export interface EditSnapshot {
 }
 
 type PageEditStacks = Record<string, EditSnapshot[]>
+const MAX_PAGE_HISTORY = 100
 
 // ─── Helpers ──────────────────────────────────────────
 
 function cloneSnapshot(s: EditSnapshot): EditSnapshot {
-  return {
-    dragEdits: s.dragEdits.map((e) => ({
-      ...e,
-      layoutIsland: e.layoutIsland
-        ? { ...e.layoutIsland, children: e.layoutIsland.children.map((child) => ({ ...child })) }
-        : undefined,
-      childUpdates: e.childUpdates.map((c) => ({ ...c }))
-    })),
-    textEdits: s.textEdits.map((e) => ({
-      ...e,
-      patch: {
-        text: e.patch.text,
-        style: { ...e.patch.style }
-      }
-    })),
-    propertyEdits: s.propertyEdits.map((e) => ({
-      ...e,
-      patch: {
-        html: e.patch.html,
-        text: e.patch.text,
-        formula: e.patch.formula ? { ...e.patch.formula } : undefined,
-        chart: e.patch.chart
-          ? {
-              ...e.patch.chart,
-              labels: [...e.patch.chart.labels],
-              values: [...e.patch.chart.values],
-              series: (e.patch.chart.series || []).map((series) => ({
-                ...series,
-                values: [...series.values]
-              }))
-            }
-          : undefined,
-        textTarget: e.patch.textTarget ? { ...e.patch.textTarget } : undefined,
-        style: e.patch.style ? { ...e.patch.style } : undefined,
-        attrs: e.patch.attrs ? { ...e.patch.attrs } : undefined
-      }
-    })),
-    deletes: s.deletes.map((e) => ({ ...e })),
-    addElements: s.addElements.map((e) => ({ ...e }))
-  }
+  return structuredClone(s)
 }
 
 function emptySnapshot(): EditSnapshot {
@@ -192,19 +154,14 @@ function replacePageSnapshot<
     EditHistoryState,
     'dragEdits' | 'textEdits' | 'propertyEdits' | 'deletes' | 'addElements'
   >
->(state: T, pageId: string, snapshot: EditSnapshot): Pick<
-  EditHistoryState,
-  'dragEdits' | 'textEdits' | 'propertyEdits' | 'deletes' | 'addElements'
-> {
+>(
+  state: T,
+  pageId: string,
+  snapshot: EditSnapshot
+): Pick<EditHistoryState, 'dragEdits' | 'textEdits' | 'propertyEdits' | 'deletes' | 'addElements'> {
   return {
-    dragEdits: [
-      ...state.dragEdits.filter((item) => item.pageId !== pageId),
-      ...snapshot.dragEdits
-    ],
-    textEdits: [
-      ...state.textEdits.filter((item) => item.pageId !== pageId),
-      ...snapshot.textEdits
-    ],
+    dragEdits: [...state.dragEdits.filter((item) => item.pageId !== pageId), ...snapshot.dragEdits],
+    textEdits: [...state.textEdits.filter((item) => item.pageId !== pageId), ...snapshot.textEdits],
     propertyEdits: [
       ...state.propertyEdits.filter((item) => item.pageId !== pageId),
       ...snapshot.propertyEdits
@@ -217,10 +174,14 @@ function replacePageSnapshot<
   }
 }
 
-function pushPageStack(stacks: PageEditStacks, pageId: string, snapshot: EditSnapshot): PageEditStacks {
+function pushPageStack(
+  stacks: PageEditStacks,
+  pageId: string,
+  snapshot: EditSnapshot
+): PageEditStacks {
   return {
     ...stacks,
-    [pageId]: [...(stacks[pageId] || []), cloneSnapshot(snapshot)]
+    [pageId]: [...(stacks[pageId] || []).slice(-(MAX_PAGE_HISTORY - 1)), cloneSnapshot(snapshot)]
   }
 }
 
@@ -232,7 +193,9 @@ function clearPageStack(stacks: PageEditStacks, pageId: string): PageEditStacks 
 
 function compactPatchObject<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
   if (!value) return {}
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined)
+  ) as Partial<T>
 }
 
 function propertyPatchEquals(a: PropertyEditItem['patch'], b: PropertyEditItem['patch']): boolean {
@@ -320,7 +283,7 @@ function appendUniqueDeletes(existing: DeleteItem[], incoming: DeleteItem[]): De
 
 // ─── Store ────────────────────────────────────────────
 
-interface EditHistoryState {
+export interface EditHistoryState {
   dragEdits: DragEditItem[]
   textEdits: TextEditItem[]
   propertyEdits: PropertyEditItem[]
@@ -347,304 +310,310 @@ interface EditHistoryState {
   getSnapshotForPage: (pageId: string) => EditSnapshot
 }
 
-export const useEditHistoryStore = create<EditHistoryState>((set, get) => ({
-  dragEdits: [],
-  textEdits: [],
-  propertyEdits: [],
-  deletes: [],
-  addElements: [],
-  undoStacks: {},
-  redoStacks: {},
-  savedCheckpoints: {},
+export const createEditHistoryStore = () =>
+  create<EditHistoryState>((set, get) => ({
+    dragEdits: [],
+    textEdits: [],
+    propertyEdits: [],
+    deletes: [],
+    addElements: [],
+    undoStacks: {},
+    redoStacks: {},
+    savedCheckpoints: {},
 
-  upsertDragEdit: (edit) =>
-    set((state) => {
-      const snapshot = getSnapshotForPageFromState(state, edit.pageId)
-      const idx = state.dragEdits.findIndex(
-        (item) =>
-          item.pageId === edit.pageId &&
-          item.htmlPath === edit.htmlPath &&
-          item.selector === edit.selector
-      )
-      let next: DragEditItem[]
-      if (idx < 0) {
-        next = [...state.dragEdits, edit]
-      } else {
-        // Merge: zIndexOnly edits preserve existing position data;
-        // drag edits preserve existing zIndex if new edit has none
-        const existing = state.dragEdits[idx]
-        const merged: DragEditItem = {
-          ...edit,
-          zIndex: edit.zIndex ?? existing.zIndex,
-          layoutIsland: edit.layoutIsland ?? existing.layoutIsland
-        }
-        if (edit.zIndexOnly) {
-          // Z-index-only change: keep existing position data, preserve flag
-          merged.x = existing.x
-          merged.y = existing.y
-          merged.width = existing.width
-          merged.height = existing.height
-          merged.layoutIsland = existing.layoutIsland
-          merged.childUpdates = existing.childUpdates
-          merged.isAbsoluteMode = existing.isAbsoluteMode
-          merged.zIndexOnly = true
+    upsertDragEdit: (edit) =>
+      set((state) => {
+        const snapshot = getSnapshotForPageFromState(state, edit.pageId)
+        const idx = state.dragEdits.findIndex(
+          (item) =>
+            item.pageId === edit.pageId &&
+            item.htmlPath === edit.htmlPath &&
+            item.selector === edit.selector
+        )
+        let next: DragEditItem[]
+        if (idx < 0) {
+          next = [...state.dragEdits, edit]
         } else {
-          // Full drag edit: clear zIndexOnly flag since position is also being updated
-          merged.zIndexOnly = undefined
+          // Merge: zIndexOnly edits preserve existing position data;
+          // drag edits preserve existing zIndex if new edit has none
+          const existing = state.dragEdits[idx]
+          const merged: DragEditItem = {
+            ...edit,
+            zIndex: edit.zIndex ?? existing.zIndex,
+            layoutIsland: edit.layoutIsland ?? existing.layoutIsland
+          }
+          if (edit.zIndexOnly) {
+            // Z-index-only change: keep existing position data, preserve flag
+            merged.x = existing.x
+            merged.y = existing.y
+            merged.width = existing.width
+            merged.height = existing.height
+            merged.layoutIsland = existing.layoutIsland
+            merged.childUpdates = existing.childUpdates
+            merged.isAbsoluteMode = existing.isAbsoluteMode
+            merged.zIndexOnly = true
+          } else {
+            // Full drag edit: clear zIndexOnly flag since position is also being updated
+            merged.zIndexOnly = undefined
+          }
+          next = state.dragEdits.map((item, i) => (i === idx ? merged : item))
         }
-        next = state.dragEdits.map((item, i) => (i === idx ? merged : item))
-      }
-      return {
-        undoStacks: pushPageStack(state.undoStacks, edit.pageId, snapshot),
-        redoStacks: clearPageStack(state.redoStacks, edit.pageId),
-        dragEdits: next
-      }
-    }),
-
-  upsertTextEdit: (edit) =>
-    set((state) => {
-      const snapshot = getSnapshotForPageFromState(state, edit.pageId)
-      const idx = state.textEdits.findIndex(
-        (item) =>
-          item.pageId === edit.pageId &&
-          item.selector === edit.selector
-      )
-      const next =
-        idx < 0
-          ? [...state.textEdits, edit]
-          : state.textEdits.map((item, i) => (i === idx ? edit : item))
-      return {
-        undoStacks: pushPageStack(state.undoStacks, edit.pageId, snapshot),
-        redoStacks: clearPageStack(state.redoStacks, edit.pageId),
-        textEdits: next
-      }
-    }),
-
-  upsertPropertyEdit: (edit) =>
-    set((state) => {
-      const snapshot = getSnapshotForPageFromState(state, edit.pageId)
-      const idx = state.propertyEdits.findIndex(
-        (item) =>
-          item.pageId === edit.pageId &&
-          item.htmlPath === edit.htmlPath &&
-          item.selector === edit.selector
-      )
-      const mergePatch = (prev: PropertyEditItem['patch'], next: PropertyEditItem['patch']): PropertyEditItem['patch'] => ({
-        html: next.html ?? prev.html,
-        text: next.text ?? prev.text,
-        formula: next.formula ?? prev.formula,
-        chart: next.chart ?? prev.chart,
-        textTarget: next.textTarget ?? prev.textTarget,
-        style: {
-          ...(prev.style || {}),
-          ...(next.style || {})
-        },
-        attrs: {
-          ...(prev.attrs || {}),
-          ...(next.attrs || {})
+        return {
+          undoStacks: pushPageStack(state.undoStacks, edit.pageId, snapshot),
+          redoStacks: clearPageStack(state.redoStacks, edit.pageId),
+          dragEdits: next
         }
-      })
-      const next =
-        idx < 0
-          ? [...state.propertyEdits, edit]
-          : state.propertyEdits.map((item, i) =>
-              i === idx ? { ...item, ...edit, patch: mergePatch(item.patch, edit.patch) } : item
+      }),
+
+    upsertTextEdit: (edit) =>
+      set((state) => {
+        const snapshot = getSnapshotForPageFromState(state, edit.pageId)
+        const idx = state.textEdits.findIndex(
+          (item) => item.pageId === edit.pageId && item.selector === edit.selector
+        )
+        const next =
+          idx < 0
+            ? [...state.textEdits, edit]
+            : state.textEdits.map((item, i) => (i === idx ? edit : item))
+        return {
+          undoStacks: pushPageStack(state.undoStacks, edit.pageId, snapshot),
+          redoStacks: clearPageStack(state.redoStacks, edit.pageId),
+          textEdits: next
+        }
+      }),
+
+    upsertPropertyEdit: (edit) =>
+      set((state) => {
+        const snapshot = getSnapshotForPageFromState(state, edit.pageId)
+        const idx = state.propertyEdits.findIndex(
+          (item) =>
+            item.pageId === edit.pageId &&
+            item.htmlPath === edit.htmlPath &&
+            item.selector === edit.selector
+        )
+        const mergePatch = (
+          prev: PropertyEditItem['patch'],
+          next: PropertyEditItem['patch']
+        ): PropertyEditItem['patch'] => ({
+          html: next.html ?? prev.html,
+          text: next.text ?? prev.text,
+          formula: next.formula ?? prev.formula,
+          chart: next.chart ?? prev.chart,
+          textTarget: next.textTarget ?? prev.textTarget,
+          style: {
+            ...(prev.style || {}),
+            ...(next.style || {})
+          },
+          attrs: {
+            ...(prev.attrs || {}),
+            ...(next.attrs || {})
+          }
+        })
+        const next =
+          idx < 0
+            ? [...state.propertyEdits, edit]
+            : state.propertyEdits.map((item, i) =>
+                i === idx ? { ...item, ...edit, patch: mergePatch(item.patch, edit.patch) } : item
+              )
+        if (idx >= 0 && propertyPatchEquals(state.propertyEdits[idx].patch, next[idx].patch)) {
+          return state
+        }
+        return {
+          undoStacks: pushPageStack(state.undoStacks, edit.pageId, snapshot),
+          redoStacks: clearPageStack(state.redoStacks, edit.pageId),
+          propertyEdits: next
+        }
+      }),
+
+    addDelete: (item) =>
+      set((state) => {
+        const snapshot = getSnapshotForPageFromState(state, item.pageId)
+        const pendingAdd = state.addElements.find(
+          (add) =>
+            add.pageId === item.pageId &&
+            add.htmlPath === item.htmlPath &&
+            selectorReferencesBlockId(item.selector, add.assignedBlockId)
+        )
+        if (pendingAdd) {
+          const cancelGeneratedBackgroundReplacement = isGeneratedBackgroundAdd(pendingAdd)
+          return {
+            undoStacks: pushPageStack(state.undoStacks, item.pageId, snapshot),
+            redoStacks: clearPageStack(state.redoStacks, item.pageId),
+            dragEdits: state.dragEdits.filter(
+              (edit) =>
+                edit.pageId !== item.pageId ||
+                !editTargetMatchesDeletedSelector(edit.selector, item.selector)
+            ),
+            textEdits: state.textEdits.filter(
+              (edit) =>
+                edit.pageId !== item.pageId ||
+                !editTargetMatchesDeletedSelector(edit.selector, item.selector)
+            ),
+            propertyEdits: state.propertyEdits.filter(
+              (edit) =>
+                edit.pageId !== item.pageId ||
+                !editTargetMatchesDeletedSelector(edit.selector, item.selector, edit.blockId)
+            ),
+            deletes: cancelGeneratedBackgroundReplacement
+              ? state.deletes.filter(
+                  (deleteItem) =>
+                    deleteItem.pageId !== item.pageId ||
+                    deleteItem.htmlPath !== item.htmlPath ||
+                    !isGeneratedBackgroundDelete(deleteItem)
+                )
+              : state.deletes,
+            addElements: state.addElements.filter(
+              (add) =>
+                add !== pendingAdd &&
+                !(
+                  cancelGeneratedBackgroundReplacement &&
+                  add.pageId === item.pageId &&
+                  add.htmlPath === item.htmlPath &&
+                  isGeneratedBackgroundAdd(add)
+                )
             )
-      if (idx >= 0 && propertyPatchEquals(state.propertyEdits[idx].patch, next[idx].patch)) {
-        return state
-      }
-      return {
-        undoStacks: pushPageStack(state.undoStacks, edit.pageId, snapshot),
-        redoStacks: clearPageStack(state.redoStacks, edit.pageId),
-        propertyEdits: next
-      }
-    }),
-
-  addDelete: (item) =>
-    set((state) => {
-      const snapshot = getSnapshotForPageFromState(state, item.pageId)
-      const pendingAdd = state.addElements.find(
-        (add) =>
-          add.pageId === item.pageId &&
-          add.htmlPath === item.htmlPath &&
-          selectorReferencesBlockId(item.selector, add.assignedBlockId)
-      )
-      if (pendingAdd) {
-        const cancelGeneratedBackgroundReplacement = isGeneratedBackgroundAdd(pendingAdd)
+          }
+        }
+        const exists = state.deletes.some((deleteItem) =>
+          deleteItemsTargetSameElement(deleteItem, item)
+        )
+        if (exists) return state
         return {
           undoStacks: pushPageStack(state.undoStacks, item.pageId, snapshot),
           redoStacks: clearPageStack(state.redoStacks, item.pageId),
-          dragEdits: state.dragEdits.filter(
-            (edit) =>
-              edit.pageId !== item.pageId ||
-              !editTargetMatchesDeletedSelector(edit.selector, item.selector)
-          ),
-          textEdits: state.textEdits.filter(
-            (edit) =>
-              edit.pageId !== item.pageId ||
-              !editTargetMatchesDeletedSelector(edit.selector, item.selector)
-          ),
-          propertyEdits: state.propertyEdits.filter(
-            (edit) =>
-              edit.pageId !== item.pageId ||
-              !editTargetMatchesDeletedSelector(edit.selector, item.selector, edit.blockId)
-          ),
-          deletes: cancelGeneratedBackgroundReplacement
-            ? state.deletes.filter(
-                (deleteItem) =>
-                  deleteItem.pageId !== item.pageId ||
-                  deleteItem.htmlPath !== item.htmlPath ||
-                  !isGeneratedBackgroundDelete(deleteItem)
-              )
-            : state.deletes,
-          addElements: state.addElements.filter(
-            (add) =>
-              add !== pendingAdd &&
-              !(
-                cancelGeneratedBackgroundReplacement &&
-                add.pageId === item.pageId &&
-                add.htmlPath === item.htmlPath &&
-                isGeneratedBackgroundAdd(add)
-              )
-          )
+          deletes: [...state.deletes, item]
         }
-      }
-      const exists = state.deletes.some((deleteItem) => deleteItemsTargetSameElement(deleteItem, item))
-      if (exists) return state
-      return {
-        undoStacks: pushPageStack(state.undoStacks, item.pageId, snapshot),
-        redoStacks: clearPageStack(state.redoStacks, item.pageId),
-        deletes: [...state.deletes, item]
-      }
-    }),
+      }),
 
-  addElement: (item) =>
-    set((state) => {
-      const snapshot = getSnapshotForPageFromState(state, item.pageId)
-      return {
-        undoStacks: pushPageStack(state.undoStacks, item.pageId, snapshot),
-        redoStacks: clearPageStack(state.redoStacks, item.pageId),
-        addElements: [...state.addElements, item]
-      }
-    }),
+    addElement: (item) =>
+      set((state) => {
+        const snapshot = getSnapshotForPageFromState(state, item.pageId)
+        return {
+          undoStacks: pushPageStack(state.undoStacks, item.pageId, snapshot),
+          redoStacks: clearPageStack(state.redoStacks, item.pageId),
+          addElements: [...state.addElements, item]
+        }
+      }),
 
-  addElementWithDeletes: (item, deletes) =>
-    set((state) => {
-      const pageId = item.pageId
+    addElementWithDeletes: (item, deletes) =>
+      set((state) => {
+        const pageId = item.pageId
+        const snapshot = getSnapshotForPageFromState(state, pageId)
+        const generatedBackgroundAdd = isGeneratedBackgroundAdd(item)
+        const existingDeletes = generatedBackgroundAdd
+          ? state.deletes.filter(
+              (deleteItem) =>
+                deleteItem.pageId !== pageId ||
+                deleteItem.htmlPath !== item.htmlPath ||
+                !isGeneratedBackgroundDelete(deleteItem)
+            )
+          : state.deletes
+        const existingAddElements = generatedBackgroundAdd
+          ? state.addElements.filter(
+              (add) =>
+                add.pageId !== pageId ||
+                add.htmlPath !== item.htmlPath ||
+                !isGeneratedBackgroundAdd(add)
+            )
+          : state.addElements
+        return {
+          undoStacks: pushPageStack(state.undoStacks, pageId, snapshot),
+          redoStacks: clearPageStack(state.redoStacks, pageId),
+          deletes: appendUniqueDeletes(existingDeletes, deletes),
+          addElements: [...existingAddElements, item]
+        }
+      }),
+
+    undo: (pageId) => {
+      const state = get()
+      const pageUndoStack = state.undoStacks[pageId] || []
+      if (pageUndoStack.length === 0) return null
+      const prev = pageUndoStack[pageUndoStack.length - 1]
+      const current = getSnapshotForPageFromState(state, pageId)
+      set({
+        undoStacks: {
+          ...state.undoStacks,
+          [pageId]: pageUndoStack.slice(0, -1)
+        },
+        redoStacks: pushPageStack(state.redoStacks, pageId, current),
+        ...replacePageSnapshot(state, pageId, prev)
+      })
+      return cloneSnapshot(prev)
+    },
+
+    redo: (pageId) => {
+      const state = get()
+      const pageRedoStack = state.redoStacks[pageId] || []
+      if (pageRedoStack.length === 0) return null
+      const next = pageRedoStack[pageRedoStack.length - 1]
+      const current = getSnapshotForPageFromState(state, pageId)
+      set({
+        redoStacks: {
+          ...state.redoStacks,
+          [pageId]: pageRedoStack.slice(0, -1)
+        },
+        undoStacks: pushPageStack(state.undoStacks, pageId, current),
+        ...replacePageSnapshot(state, pageId, next)
+      })
+      return cloneSnapshot(next)
+    },
+
+    canUndo: (pageId) => Boolean(pageId && (get().undoStacks[pageId]?.length || 0) > 0),
+    canRedo: (pageId) => Boolean(pageId && (get().redoStacks[pageId]?.length || 0) > 0),
+    hasPendingEdits: (pageId) => {
+      if (!pageId) return false
+      const state = get()
       const snapshot = getSnapshotForPageFromState(state, pageId)
-      const generatedBackgroundAdd = isGeneratedBackgroundAdd(item)
-      const existingDeletes = generatedBackgroundAdd
-        ? state.deletes.filter(
-            (deleteItem) =>
-              deleteItem.pageId !== pageId ||
-              deleteItem.htmlPath !== item.htmlPath ||
-              !isGeneratedBackgroundDelete(deleteItem)
-          )
-        : state.deletes
-      const existingAddElements = generatedBackgroundAdd
-        ? state.addElements.filter(
-            (add) =>
-              add.pageId !== pageId ||
-              add.htmlPath !== item.htmlPath ||
-              !isGeneratedBackgroundAdd(add)
-          )
-        : state.addElements
-      return {
-        undoStacks: pushPageStack(state.undoStacks, pageId, snapshot),
-        redoStacks: clearPageStack(state.redoStacks, pageId),
-        deletes: appendUniqueDeletes(existingDeletes, deletes),
-        addElements: [...existingAddElements, item]
-      }
-    }),
-
-  undo: (pageId) => {
-    const state = get()
-    const pageUndoStack = state.undoStacks[pageId] || []
-    if (pageUndoStack.length === 0) return null
-    const prev = pageUndoStack[pageUndoStack.length - 1]
-    const current = getSnapshotForPageFromState(state, pageId)
-    set({
-      undoStacks: {
-        ...state.undoStacks,
-        [pageId]: pageUndoStack.slice(0, -1)
-      },
-      redoStacks: pushPageStack(state.redoStacks, pageId, current),
-      ...replacePageSnapshot(state, pageId, prev)
-    })
-    return cloneSnapshot(prev)
-  },
-
-  redo: (pageId) => {
-    const state = get()
-    const pageRedoStack = state.redoStacks[pageId] || []
-    if (pageRedoStack.length === 0) return null
-    const next = pageRedoStack[pageRedoStack.length - 1]
-    const current = getSnapshotForPageFromState(state, pageId)
-    set({
-      redoStacks: {
-        ...state.redoStacks,
-        [pageId]: pageRedoStack.slice(0, -1)
-      },
-      undoStacks: pushPageStack(state.undoStacks, pageId, current),
-      ...replacePageSnapshot(state, pageId, next)
-    })
-    return cloneSnapshot(next)
-  },
-
-  canUndo: (pageId) => Boolean(pageId && (get().undoStacks[pageId]?.length || 0) > 0),
-  canRedo: (pageId) => Boolean(pageId && (get().redoStacks[pageId]?.length || 0) > 0),
-  hasPendingEdits: (pageId) => {
-    if (!pageId) return false
-    const state = get()
-    const snapshot = getSnapshotForPageFromState(state, pageId)
-    return Boolean(
-      snapshot.dragEdits.length > 0 ||
+      return Boolean(
+        snapshot.dragEdits.length > 0 ||
         snapshot.textEdits.length > 0 ||
         snapshot.propertyEdits.length > 0 ||
         snapshot.deletes.length > 0 ||
         snapshot.addElements.length > 0
-    )
-  },
+      )
+    },
 
-  markPageSaved: (pageId) =>
-    set((state) => ({
-      ...replacePageSnapshot(state, pageId, emptySnapshot()),
-      undoStacks: clearPageStack(state.undoStacks, pageId),
-      redoStacks: clearPageStack(state.redoStacks, pageId),
-      savedCheckpoints: {
-        ...state.savedCheckpoints,
-        [pageId]: emptySnapshot()
-      }
-    })),
+    markPageSaved: (pageId) =>
+      set((state) => ({
+        ...replacePageSnapshot(state, pageId, emptySnapshot()),
+        undoStacks: clearPageStack(state.undoStacks, pageId),
+        redoStacks: clearPageStack(state.redoStacks, pageId),
+        savedCheckpoints: {
+          ...state.savedCheckpoints,
+          [pageId]: emptySnapshot()
+        }
+      })),
 
-  clearPage: (pageId) =>
-    set((state) => ({
-      dragEdits: state.dragEdits.filter((item) => item.pageId !== pageId),
-      textEdits: state.textEdits.filter((item) => item.pageId !== pageId),
-      propertyEdits: state.propertyEdits.filter((item) => item.pageId !== pageId),
-      deletes: state.deletes.filter((item) => item.pageId !== pageId),
-      addElements: state.addElements.filter((item) => item.pageId !== pageId),
-      undoStacks: clearPageStack(state.undoStacks, pageId),
-      redoStacks: clearPageStack(state.redoStacks, pageId),
-      savedCheckpoints: {
-        ...state.savedCheckpoints,
-        [pageId]: emptySnapshot()
-      }
-    })),
+    clearPage: (pageId) =>
+      set((state) => ({
+        dragEdits: state.dragEdits.filter((item) => item.pageId !== pageId),
+        textEdits: state.textEdits.filter((item) => item.pageId !== pageId),
+        propertyEdits: state.propertyEdits.filter((item) => item.pageId !== pageId),
+        deletes: state.deletes.filter((item) => item.pageId !== pageId),
+        addElements: state.addElements.filter((item) => item.pageId !== pageId),
+        undoStacks: clearPageStack(state.undoStacks, pageId),
+        redoStacks: clearPageStack(state.redoStacks, pageId),
+        savedCheckpoints: {
+          ...state.savedCheckpoints,
+          [pageId]: emptySnapshot()
+        }
+      })),
 
-  clear: () =>
-    set({
-      dragEdits: [],
-      textEdits: [],
-      propertyEdits: [],
-      deletes: [],
-      addElements: [],
-      undoStacks: {},
-      redoStacks: {},
-      savedCheckpoints: {}
-    }),
+    clear: () =>
+      set({
+        dragEdits: [],
+        textEdits: [],
+        propertyEdits: [],
+        deletes: [],
+        addElements: [],
+        undoStacks: {},
+        redoStacks: {},
+        savedCheckpoints: {}
+      }),
 
-  getSnapshotForPage: (pageId) => {
-    return cloneSnapshot(getSnapshotForPageFromState(get(), pageId))
-  }
-}))
+    getSnapshotForPage: (pageId) => {
+      return cloneSnapshot(getSnapshotForPageFromState(get(), pageId))
+    }
+  }))
+
+export const useEditHistoryStore = createEditHistoryStore()

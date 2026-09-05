@@ -11,6 +11,7 @@ import { validatePersistedPageHtml } from '../presentation/html/html-utils'
 import { buildDesignContractWithLLM, runDeepAgentDeckGeneration } from './agent-runner'
 import {
   type DesignContract,
+  normalizeVisualFormat,
   resolveInheritedAnimationPreferences,
   type AnimationPreferencesPayload,
   type GeneratedPagePayload
@@ -26,10 +27,7 @@ import {
   resolveSourceDocuments
 } from './context'
 import { selectRetrySessionPages } from './retry-page-selection'
-import {
-  prepareDeckBackgroundAssets,
-  resolveDeckBackgroundAsset
-} from './deck-backgrounds'
+import { prepareDeckBackgroundAssets, resolveDeckBackgroundAsset } from './deck-backgrounds'
 import { prepareDeckImageAssets } from './deck-images'
 import { mergeSessionMetadata } from './metadata-parser'
 
@@ -180,6 +178,8 @@ export async function executeRetryFailedPages(
       title: page.title || snapshot?.title || page.file_slug,
       content_outline: snapshot?.content_outline || '',
       layout_intent: snapshot?.layout_intent || null,
+      visual_format: snapshot?.visual_format || null,
+      audience_move: snapshot?.audience_move || null,
       layout_id: snapshot?.layout_id || null,
       image_asset_path: snapshot?.image_asset_path || null,
       image_asset_paths: snapshot?.image_asset_paths || [],
@@ -295,6 +295,8 @@ export async function executeRetryFailedPages(
       title: page.title || page.page_id,
       contentOutline: page.content_outline || '',
       layoutIntent: page.layout_intent ? normalizeLayoutIntent(page.layout_intent) : undefined,
+      visualFormat: normalizeVisualFormat(page.visual_format),
+      audienceMove: page.audience_move || undefined,
       layoutId: normalizeUniversalLayoutId(page.layout_id),
       imageAssetPath: page.image_asset_path || undefined,
       imageAssetPaths: page.image_asset_paths.length ? page.image_asset_paths : undefined,
@@ -346,6 +348,8 @@ export async function executeRetryFailedPages(
       title: outline.title,
       contentOutline: outline.contentOutline,
       layoutIntent: outline.layoutIntent,
+      visualFormat: outline.visualFormat,
+      audienceMove: outline.audienceMove,
       layoutId: outline.layoutId,
       imageAssetPath: outline.imageAssetPath,
       imageAssetPaths: outline.imageAssetPaths,
@@ -436,6 +440,8 @@ export async function executeRetryFailedPages(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -468,6 +474,8 @@ export async function executeRetryFailedPages(
     title: string
     contentOutline: string
     layoutIntent?: LayoutIntent
+    visualFormat?: import('@shared/generation').OutlineItem['visualFormat']
+    audienceMove?: import('@shared/generation').OutlineItem['audienceMove']
     layoutId?: import('@shared/generation').OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]
@@ -490,6 +498,8 @@ export async function executeRetryFailedPages(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -529,6 +539,8 @@ export async function executeRetryFailedPages(
     title: string
     contentOutline: string
     layoutIntent?: LayoutIntent
+    visualFormat?: import('@shared/generation').OutlineItem['visualFormat']
+    audienceMove?: import('@shared/generation').OutlineItem['audienceMove']
     layoutId?: import('@shared/generation').OutlineItem['layoutId']
     imageAssetPath?: string
     imageAssetPaths?: string[]
@@ -544,6 +556,8 @@ export async function executeRetryFailedPages(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -563,8 +577,8 @@ export async function executeRetryFailedPages(
     pendingPages,
     pause
   } = await runDeepAgentDeckGeneration({
-      appendSessionEvent: (data) =>
-        db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
+    appendSessionEvent: (data) =>
+      db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
     renderingLabel: uiText(
       context.appLocale,
       `正在重新生成 ${retryPages.length} 个失败页面`,
@@ -603,6 +617,8 @@ export async function executeRetryFailedPages(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -616,6 +632,8 @@ export async function executeRetryFailedPages(
       title: page.title,
       contentOutline: page.contentOutline,
       layoutIntent: page.layoutIntent,
+      visualFormat: page.visualFormat,
+      audienceMove: page.audienceMove,
       layoutId: page.layoutId,
       imageAssetPath: page.imageAssetPath,
       imageAssetPaths: page.imageAssetPaths,
@@ -648,12 +666,15 @@ export async function executeRetryFailedPages(
       totalCompletedPageCount > 0 ? 'partial' : 'failed',
       pause.failure.technicalDetail
     )
-    await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
-      lastRunId: context.runId,
-      entryMode: 'multi_page',
-      indexPath,
-      projectId: context.projectId
-    }))
+    await db.updateSessionMetadata(
+      context.sessionId,
+      buildSessionMetadata({
+        lastRunId: context.runId,
+        entryMode: 'multi_page',
+        indexPath,
+        projectId: context.projectId
+      })
+    )
     await db.updateSessionDesignContract(context.sessionId, designContract)
     await db.updateProjectStatus(context.projectId, 'draft')
     emitRetryChunk({
@@ -834,12 +855,15 @@ export async function executeRetryFailedPages(
     (a, b) => a.pageNumber - b.pageNumber
   )
 
-  await db.updateSessionMetadata(context.sessionId, buildSessionMetadata({
-    lastRunId: context.runId,
-    entryMode: 'multi_page',
-    indexPath,
-    projectId: context.projectId
-  }))
+  await db.updateSessionMetadata(
+    context.sessionId,
+    buildSessionMetadata({
+      lastRunId: context.runId,
+      entryMode: 'multi_page',
+      indexPath,
+      projectId: context.projectId
+    })
+  )
   await db.updateSessionDesignContract(context.sessionId, designContract)
   await db.updateProjectStatus(context.projectId, 'draft')
 

@@ -199,6 +199,8 @@ describe('generation run repository facade', () => {
         pageId: 'page-a',
         pageNumber: 1,
         title: 'Page A new',
+        visualFormat: 'chart',
+        audienceMove: 'sees metrics → understands the trend',
         status: 'completed'
       })
 
@@ -214,7 +216,12 @@ describe('generation run repository facade', () => {
 
       const snapshot = await db.listLatestGenerationPageSnapshot('session-run')
       expect(snapshot).toHaveLength(1)
-      expect(snapshot[0]).toMatchObject({ title: 'Page A new', status: 'completed' })
+      expect(snapshot[0]).toMatchObject({
+        title: 'Page A new',
+        visual_format: 'chart',
+        audience_move: 'sees metrics → understands the trend',
+        status: 'completed'
+      })
 
       await db.updateGenerationRunStatus('run-second', 'failed', 'model error')
       await db.upsertGenerationPage({

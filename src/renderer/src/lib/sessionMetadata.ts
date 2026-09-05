@@ -10,6 +10,7 @@ type SessionLike = {
 
 type SessionMetadata = {
   source?: unknown
+  templateInitialPrompt?: string
 }
 
 export interface EditorGate {

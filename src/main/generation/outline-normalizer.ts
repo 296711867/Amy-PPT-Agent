@@ -3,16 +3,12 @@
  * 从 parsePlanningItems / planNewPage 的重复代码中提取，
  * 同时支持 string[] 和 OutlineItemData[] 两种 keyPoints 形态。
  */
-import type {
-  OutlineItemData,
-  OutlineItemEntry,
-  OutlineItemPriority
-} from '@shared/generation'
+import type { OutlineItemData, OutlineItemEntry, OutlineItemPriority } from '@shared/generation'
 
 export const MAX_KEY_POINTS_PER_SLIDE = 10
 export const MAX_OUTLINE_TEXT_CHUNKS = 10
-export const MAX_OUTLINE_TEXT_LENGTH = 260
-export const MAX_KEY_POINT_LENGTH = 32
+export const MAX_OUTLINE_TEXT_LENGTH = 720
+export const MAX_KEY_POINT_LENGTH = 72
 export const MAX_ITEM_DETAIL_LENGTH = 60
 
 export const normalizeOutlineText = (raw: string): string => {
@@ -32,7 +28,10 @@ export const normalizeOutlineText = (raw: string): string => {
 /** Normalize the planned "before → after" audience transition for one slide. */
 export const normalizeAudienceMove = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined
-  const normalized = value.trim().replace(/\s+/g, ' ')
+  const normalized = value
+    .trim()
+    .replace(/\s*(?:-|=)>\s*/g, ' → ')
+    .replace(/\s+/g, ' ')
   if (normalized.length < 3) return undefined
   return normalized.slice(0, 160)
 }
@@ -62,32 +61,38 @@ export const normalizeOutlineEntries = (value: unknown): OutlineItemData[] => {
         if (!label) return null
         return {
           id: nextItemId(),
-          label: label.length > MAX_KEY_POINT_LENGTH
-            ? `${label.slice(0, MAX_KEY_POINT_LENGTH).trimEnd()}…`
-            : label
+          label:
+            label.length > MAX_KEY_POINT_LENGTH
+              ? `${label.slice(0, MAX_KEY_POINT_LENGTH).trimEnd()}…`
+              : label
         }
       }
       if (isOutlineItemData(entry)) {
         const label = String(entry.label ?? '').trim()
         if (!label) return null
         const detail = typeof entry.detail === 'string' ? entry.detail.trim() : undefined
-        const displayValue = typeof entry.displayValue === 'string' ? entry.displayValue.trim() : undefined
+        const displayValue =
+          typeof entry.displayValue === 'string' ? entry.displayValue.trim() : undefined
         const value = entry.value
         const unit = typeof entry.unit === 'string' ? entry.unit.trim() : undefined
         const priority = normalizePriority(entry.priority)
         const id = typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : nextItemId()
         return {
           id,
-          label: label.length > MAX_KEY_POINT_LENGTH
-            ? `${label.slice(0, MAX_KEY_POINT_LENGTH).trimEnd()}…`
-            : label,
+          label:
+            label.length > MAX_KEY_POINT_LENGTH
+              ? `${label.slice(0, MAX_KEY_POINT_LENGTH).trimEnd()}…`
+              : label,
           ...(value !== undefined && value !== null && value !== '' ? { value } : {}),
           ...(unit ? { unit } : {}),
           ...(displayValue ? { displayValue } : {}),
           ...(detail
-            ? { detail: detail.length > MAX_ITEM_DETAIL_LENGTH
-              ? `${detail.slice(0, MAX_ITEM_DETAIL_LENGTH).trimEnd()}…`
-              : detail }
+            ? {
+                detail:
+                  detail.length > MAX_ITEM_DETAIL_LENGTH
+                    ? `${detail.slice(0, MAX_ITEM_DETAIL_LENGTH).trimEnd()}…`
+                    : detail
+              }
             : {}),
           ...(priority ? { priority } : {})
         }
@@ -111,6 +116,15 @@ export const outlineEntryToText = (entry: OutlineItemEntry): string => {
     return `${entry.value}${unitText}`
   }
   return entry.label
+}
+
+/** Preserve a structured point's claim, metric, and evidence in the page-generation prompt. */
+export const outlineEntryToPromptText = (entry: OutlineItemEntry): string => {
+  if (typeof entry === 'string') return entry
+  const metric = outlineEntryToText(entry)
+  return [entry.label, metric !== entry.label ? metric : '', entry.detail || '']
+    .filter(Boolean)
+    .join(' — ')
 }
 
 export const outlineEntriesToTexts = (entries: OutlineItemEntry[]): string[] =>

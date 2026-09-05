@@ -48,6 +48,8 @@ export async function runStyleSwitchPageFlow(args: {
       title: item.title,
       contentOutline: item.contentOutline,
       layoutIntent: item.layoutIntent,
+      visualFormat: item.visualFormat,
+      audienceMove: item.audienceMove,
       layoutId: item.layoutId,
       imageAssetPath: item.imageAssetPath,
       imageAssetPaths: item.imageAssetPaths

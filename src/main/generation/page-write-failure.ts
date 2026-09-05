@@ -40,13 +40,23 @@ export function extractWriteValidationFailure(
   return `${label}: ${detail}`
 }
 
-export function buildPageNotWrittenMessage(args: {
+export interface PageNotWrittenMessageArgs {
   pageId: string
   writeToolName: string
   lastWriteValidationFailure: string
-}): string {
+  /**
+   * 模型整轮既没有调用任何工具、也没有输出正文（GLM-5.x 等思考模型在
+   * coding 端点上的已知空回合现象）。此时错误文案必须指向「模型空回合」，
+   * 而不是误导性的「模型没有调用写盘工具」。
+   */
+  modelReturnedEmptyTurn?: boolean
+}
+
+export function buildPageNotWrittenMessage(args: PageNotWrittenMessageArgs): string {
   const lines = [
-    `页面未写入 (${args.pageId})：模型没有成功调用 ${args.writeToolName} 写入目标 page 文件。`,
+    args.modelReturnedEmptyTurn
+      ? `页面未写入 (${args.pageId})：模型连续返回空回合（没有任何工具调用，也没有正文输出），${args.writeToolName} 未被执行。`
+      : `页面未写入 (${args.pageId})：模型没有成功调用 ${args.writeToolName} 写入目标 page 文件。`,
     `必须调用 ${args.writeToolName}(pageId="${args.pageId}", content=完整创意页面片段)，不要只在最终回复里描述 HTML。`
   ]
   if (args.lastWriteValidationFailure) {
@@ -55,6 +65,34 @@ export function buildPageNotWrittenMessage(args: {
     )
   }
   return lines.join(' ')
+}
+
+/**
+ * 空回合判定：模型整轮没有任何工具调用、也没有输出可救援的正文。
+ * 满足时优先走「同会话续跑」而不是立刻整页重试。
+ */
+export function isModelEmptyTurn(args: {
+  sawToolCall: boolean
+  finalAssistantText: string
+}): boolean {
+  return !args.sawToolCall && !args.finalAssistantText.trim()
+}
+
+/**
+ * 空回合续跑指令：发回同一个 agent 会话，把模型从「思考完就停」的
+ * 状态拉回工具调用，比整页重建重试便宜一个数量级。
+ */
+export function buildEmptyTurnContinuationMessage(args: {
+  pageId: string
+  writeToolName: string
+  continuationRound: number
+}): string {
+  return [
+    `Continue the slide task (continuation ${args.continuationRound}).`,
+    `Your previous turn ended without calling any tool and without producing text. Nothing has been written yet.`,
+    `Call ${args.writeToolName}(pageId="${args.pageId}", content=完整创意页面片段) now with the complete creative page fragment.`,
+    'Do not reply with text only, do not apologize, and do not restate the plan.'
+  ].join(' ')
 }
 
 const HTML_ROOT_TAG_RE = /<(div|section|main|article|header|footer)\b/i

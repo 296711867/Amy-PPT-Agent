@@ -3,6 +3,7 @@ import type { JobLease } from '../agent-runtime'
 import type { EditContext } from '../generation/types'
 import type { LayoutIntent } from '@shared/layout-intent'
 import type { UniversalLayoutId } from '@shared/universal-layouts'
+import type { VisualFormat } from '@shared/generation'
 
 export const STYLE_SWITCH_CONCURRENCY = 2
 
@@ -14,6 +15,8 @@ export type StyleSwitchPageRef = {
   htmlPath: string
   contentOutline: string
   layoutIntent?: LayoutIntent
+  visualFormat?: VisualFormat
+  audienceMove?: string
   layoutId?: UniversalLayoutId
   imageAssetPath?: string
   imageAssetPaths?: string[]

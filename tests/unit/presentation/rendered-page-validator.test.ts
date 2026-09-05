@@ -133,6 +133,8 @@ describe('render validation timeout resilience (source contract)', () => {
     expect(source).toContain('VALIDATION_TIMEOUT_ATTEMPTS = 2')
     expect(source).toContain("error.message.includes('render validation timeout')")
     expect(source).toContain('retrying once')
+    expect(source).toContain('RENDER_TIMEOUT_COOLDOWN_MS = 60 * 60_000')
+    expect(source).toContain('rendered page validation skipped during timeout cooldown')
   })
 
   it('keeps a 48px floor on bare h1 title elements in the runtime shell', () => {

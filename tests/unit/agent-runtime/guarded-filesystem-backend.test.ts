@@ -25,6 +25,29 @@ afterEach(async () => {
 })
 
 describe('GuardedFilesystemBackend selector edit validation', () => {
+  it('returns only the editable fragment when a template page is inspected', async () => {
+    const projectDir = await createTemporaryDirectory()
+    const pagePath = path.join(projectDir, 'page-template.html')
+    await fs.promises.writeFile(
+      pagePath,
+      '<!doctype html><html><head><script>largeRuntime()</script></head><body><main class="ppt-page-root"><div class="ppt-page-content"><section data-page-scaffold="1"><main data-role="content"><figure style="position:absolute">background</figure><section style="position:absolute">editable</section></main></section></div></main><script>largeFooterRuntime()</script></body></html>',
+      'utf-8'
+    )
+    const backend = new GuardedFilesystemBackend({
+      rootDir: projectDir,
+      virtualMode: true,
+      compactTemplatePagePath: '/page-template.html'
+    })
+
+    const result = await backend.read('/page-template.html', 0, 1200)
+
+    expect(result.content).toContain('position:absolute')
+    expect(result.content).toContain('editable')
+    expect(result.content).not.toContain('largeRuntime')
+    expect(result.content).not.toContain('data-page-scaffold')
+    expect(result.content).not.toContain('data-role="content"')
+  })
+
   it('keeps an accepted selector edit', async () => {
     const rootDir = await createTemporaryDirectory()
     const pagePath = path.join(rootDir, 'page-1.html')

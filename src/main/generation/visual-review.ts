@@ -107,6 +107,10 @@ export function sampleVisualReviewPages<T extends { pageNumber: number }>(
   return pages.filter((_, index) => keep.has(index))
 }
 
+export function supportsVisualReviewInput(baseUrl: string): boolean {
+  return !/\/api\/coding\/paas(?:\/|$)/i.test(baseUrl)
+}
+
 export function parseVisualReviewVerdicts(
   responseText: string,
   expectedPages: VisualReviewPageRef[]
@@ -212,6 +216,16 @@ export async function runVisualDeckReview(args: {
     if (args.pages.length === 0) return
     if (args.isEnabled && !(await args.isEnabled())) return
     if (args.signal?.aborted) return
+    if (!supportsVisualReviewInput(args.model.baseUrl)) {
+      emitStatus(
+        uiText(
+          args.appLocale,
+          '视觉自检已跳过：当前 Coding 接口仅接受文本输入',
+          'Visual review skipped: the current Coding endpoint accepts text input only'
+        )
+      )
+      return
+    }
 
     const reviewedPages = sampleVisualReviewPages(
       [...args.pages].sort((a, b) => a.pageNumber - b.pageNumber)

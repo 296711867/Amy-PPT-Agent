@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionPageRecord } from '../../../src/main/db/database'
 import {
   hasCompleteSessionPageCoverage,
-  recoverUsableSessionPages
+  recoverUsableSessionPages,
+  shouldRecoverSessionPages
 } from '../../../src/main/session/page-status-recovery'
 
 const temporaryDirectories: string[] = []
@@ -51,6 +52,21 @@ afterEach(async () => {
 })
 
 describe('session page status recovery', () => {
+  it('only recovers sessions that already started a generation run and are not running', () => {
+    // 从模板创建、尚未开始生成的会话：pending + 已落盘模板页是设计状态，不能恢复。
+    expect(
+      shouldRecoverSessionPages({ hasActiveRun: false, hasGenerationHistory: false })
+    ).toBe(false)
+    // 正在运行的会话交给运行态本身，不做恢复。
+    expect(shouldRecoverSessionPages({ hasActiveRun: true, hasGenerationHistory: true })).toBe(
+      false
+    )
+    // 中断过生成的会话（存在 generation run/job）才允许恢复可用页面。
+    expect(shouldRecoverSessionPages({ hasActiveRun: false, hasGenerationHistory: true })).toBe(
+      true
+    )
+  })
+
   it('requires unique completed coverage for every expected page number', () => {
     const completed = [1, 2, 3, 4, 5, 6].map((pageNumber) =>
       sessionPage({
@@ -109,6 +125,44 @@ describe('session page status recovery', () => {
     expect(result.recoveredPageIds).toEqual(['page-pending', 'page-blocked'])
     expect(result.pages.map((page) => page.status)).toEqual(['completed', 'completed'])
     expect(upsertSessionPage).toHaveBeenCalledTimes(2)
+  })
+
+  it('never recovers an untouched template seed page even with run history (I-15 blind spot)', async () => {
+    const projectDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'amy-seed-recovery-'))
+    temporaryDirectories.push(projectDir)
+    const seed = sessionPage({
+      id: 'seed-1',
+      pageId: 'page-seed',
+      pageNumber: 1,
+      status: 'pending'
+    })
+    const rewritten = sessionPage({
+      id: 'rewritten-2',
+      pageId: 'page-rewritten',
+      pageNumber: 2,
+      status: 'pending'
+    })
+    const seedHtml = validPageHtml(seed.file_slug)
+    const rewrittenHtml = validPageHtml(rewritten.file_slug).replace(
+      'Recovered page',
+      'Generated page'
+    )
+    await fs.promises.writeFile(path.join(projectDir, seed.html_path), seedHtml, 'utf-8')
+    await fs.promises.writeFile(path.join(projectDir, rewritten.html_path), rewrittenHtml, 'utf-8')
+    const upsertSessionPage = vi.fn(async () => undefined)
+
+    const result = await recoverUsableSessionPages({
+      db: { upsertSessionPage } as never,
+      sessionId: 'session-1',
+      pages: [seed, rewritten],
+      resolveHtmlPath: (page) => path.join(projectDir, page.html_path),
+      isUntouchedSeed: (page, html) => page.file_slug === 'page-seed' && html === seedHtml
+    })
+
+    // 种子页保持 pending（从未被生成改写）；真正写过的页面照常恢复
+    expect(result.recoveredPageIds).toEqual(['page-rewritten'])
+    expect(result.pages.map((page) => page.status)).toEqual(['pending', 'completed'])
+    expect(upsertSessionPage).toHaveBeenCalledTimes(1)
   })
 
   it('keeps real generation failures and placeholder pages retryable', async () => {

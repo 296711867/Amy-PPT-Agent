@@ -72,6 +72,23 @@ describe('deck image preparation', () => {
     expect(onStatus).toHaveBeenCalledWith({ pageNumber: 1, state: 'placeholder' })
   })
 
+  it("injects nothing under the 'none' policy, even for image-slot layouts", async () => {
+    const onStatus = vi.fn()
+    const result = await prepareDeckImageAssets({
+      db: { getActiveImageModelConfig: vi.fn() },
+      decryptApiKey: (value) => value,
+      projectDir: process.cwd(),
+      imagePolicy: 'none',
+      outlineItems: imageOutline,
+      signal: new AbortController().signal,
+      onStatus
+    })
+
+    expect(result).toEqual(imageOutline)
+    expect(result[0].imageAssetPath).toBeUndefined()
+    expect(onStatus).not.toHaveBeenCalled()
+  })
+
   it('falls back to the placeholder when no image model is configured', async () => {
     const onStatus = vi.fn()
     const result = await prepareDeckImageAssets({

@@ -215,6 +215,10 @@ export function createSessionDeckAgent(args: CreateSessionDeckAgentArgs): DeepAg
     rootDir: context.projectDir,
     virtualMode: true,
     disableEditFile: true,
+    compactTemplatePagePath:
+      context.templatePageReadRequired && context.selectedPageId
+        ? `/${context.selectedPageId}.html`
+        : undefined,
     editBlockedReason: context.templatePageReadRequired
       ? '当前模板生成任务禁止使用 edit_file。请使用 update_template_page_file(pageId, content)。'
       : '当前生成/全局编辑任务禁止使用 edit_file。请使用 update_single_page_file(pageId, content) 或 update_page_file(pageId, content)。'

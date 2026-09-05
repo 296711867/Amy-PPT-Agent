@@ -4,10 +4,36 @@ import {
   editTargetMatchesDeletedSelector,
   useEditHistoryStore
 } from '../../../src/renderer/src/store/editHistoryStore'
+import { useHtmlEditHistoryStore } from '../../../src/renderer/src/store/htmlEditHistoryStore'
 
 describe('editHistoryStore delete merging', () => {
   beforeEach(() => {
     useEditHistoryStore.getState().clear()
+    useHtmlEditHistoryStore.getState().clear()
+  })
+
+  it('keeps the session and standalone HTML editor histories isolated', () => {
+    useEditHistoryStore.getState().addDelete({
+      pageId: 'page-1',
+      htmlPath: '/tmp/page.html',
+      selector: '[data-block-id="session-only"]'
+    })
+
+    expect(useEditHistoryStore.getState().hasPendingEdits('page-1')).toBe(true)
+    expect(useHtmlEditHistoryStore.getState().hasPendingEdits('page-1')).toBe(false)
+  })
+
+  it('bounds per-page undo history', () => {
+    for (let index = 0; index < 120; index += 1) {
+      useEditHistoryStore.getState().upsertTextEdit({
+        pageId: 'page-1',
+        htmlPath: '/tmp/page.html',
+        selector: '[data-block-id="title"]',
+        patch: { text: `Title ${index}`, style: {} }
+      })
+    }
+
+    expect(useEditHistoryStore.getState().undoStacks['page-1']).toHaveLength(100)
   })
 
   it('cancels a pending added element when that element is deleted before saving', () => {

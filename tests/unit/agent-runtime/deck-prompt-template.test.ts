@@ -56,6 +56,10 @@ describe('deck system prompt template', () => {
     expect(prompt).toContain('## Source documents')
     expect(prompt).toContain('- /docs/source.md')
     expect(prompt).toContain('update_template_page_file')
+    expect(prompt).toContain('the inspected target template page is the layout source of truth')
+    expect(prompt).not.toMatch(
+      /amy-ppt-layout[^\n]+read that skill's SKILL\.md before applying this capability/
+    )
   })
 
   it('keeps the single-page system prompt stable across pages in the same deck', () => {

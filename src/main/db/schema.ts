@@ -161,6 +161,8 @@ export const generationPages = sqliteTable('generation_pages', {
   title: text('title').notNull(),
   contentOutline: text('content_outline'),
   layoutIntent: text('layout_intent'),
+  visualFormat: text('visual_format'),
+  audienceMove: text('audience_move'),
   layoutId: text('layout_id'),
   imageAssetPath: text('image_asset_path'),
   imageAssetPaths: text('image_asset_paths'),

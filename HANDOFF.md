@@ -1,7 +1,7 @@
 # Amy-PPT 项目上下文与交接文档
 
-> 更新时间：2026-08-29 · 当前版本 **1.0.4**
-> 本文件面向接手开发/协作者：项目全景、近期演进、打包发布 SOP。新 Agent 会话开始时优先读本文件，再按需查阅 `README.md`、`PROJECT_STRUCTURE.md`、`AGENTS.md`。
+> 更新时间：2026-09-05 · 开发版本 **1.0.5** · 已发布版本 **1.0.4**
+> 本文件面向接手开发/协作者：项目全景、近期演进、打包发布 SOP。新 Agent 会话先读 `AGENTS.md` 和 `docs/development/AI_DEVELOPMENT_GUIDE.md`；涉及生成时继续读 `docs/design/generation-quality-contract.md`，再按需查阅本文件、`PROJECT_STRUCTURE.md` 和问题台账。
 
 ---
 
@@ -174,6 +174,8 @@ pnpm install
 ## 6. 当前状态与后续建议
 
 - 全部改动已提交并推送（与 origin/main 同步）；全量测试与 typecheck 双绿
+- 模板生成真实续跑已经闭环 I-18–I-25：15/15 页均脱离模板种子指纹，熔断跳过页不再假完成，渲染超时冷却、精简模板上下文、写盘后超时恢复和文本型模型视觉评审跳过均已验证。
+- 可编辑 PPTX 导出已闭环 I-26：静态全页背景保持原 DOM 层级，纯色背景不再误触发整页栅格化；运放 15 页验收文件逐页渲染正常且每页保留文本节点。
 - git remote URL 已更新为新仓库名 `Amy-PPT-Agent.git`（旧 URL 靠 GitHub 重定向也能用）
 - `dist/` 里还有 v1.0.3 旧产物，可清理
 - **若未来要做应用内自动更新**：需在主进程接入 `electron-updater`，且每次 release 同时上传 `latest.yml` + `.blockmap`

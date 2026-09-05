@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   normalizeOutlineEntries,
   normalizeKeyPoints,
+  outlineEntryToPromptText,
   outlineEntryToText,
   MAX_KEY_POINT_LENGTH
 } from '../../../src/main/generation/outline-normalizer'
@@ -45,9 +46,7 @@ describe('normalizeOutlineEntries', () => {
   it('truncates overlong labels and details', () => {
     const longLabel = 'A'.repeat(MAX_KEY_POINT_LENGTH + 10)
     const longDetail = 'D'.repeat(80)
-    const entries = normalizeOutlineEntries([
-      { label: longLabel, detail: longDetail }
-    ])
+    const entries = normalizeOutlineEntries([{ label: longLabel, detail: longDetail }])
     expect(entries[0].label.length).toBe(MAX_KEY_POINT_LENGTH + 1) // +1 for ellipsis
     expect(entries[0].label).toMatch(/…$/)
     expect(entries[0].detail!.length).toBeLessThanOrEqual(61) // 60 + ellipsis
@@ -70,6 +69,19 @@ describe('outlineEntryToText', () => {
     expect(outlineEntryToText({ id: '1', label: 'L', displayValue: '42%' })).toBe('42%')
     expect(outlineEntryToText({ id: '1', label: 'L', value: 42.7, unit: '%' })).toBe('42.7%')
     expect(outlineEntryToText({ id: '1', label: 'OnlyLabel' })).toBe('OnlyLabel')
+  })
+})
+
+describe('outlineEntryToPromptText', () => {
+  it('keeps the claim, metric, and supporting detail together', () => {
+    expect(
+      outlineEntryToPromptText({
+        id: '1',
+        label: '续费率提升',
+        displayValue: '+12%',
+        detail: '主要来自新手引导优化'
+      })
+    ).toBe('续费率提升 — +12% — 主要来自新手引导优化')
   })
 })
 

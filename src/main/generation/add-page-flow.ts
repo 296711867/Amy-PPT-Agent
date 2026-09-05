@@ -217,6 +217,8 @@ export async function executeAddPageGeneration(
     moduleCount?: number
     visualAspect?: import('@shared/universal-layouts').VisualAspect
     contentDensity?: import('@shared/universal-layouts').ContentDensity
+    visualFormat: import('@shared/generation').VisualFormat
+    audienceMove: string
     layoutId?: UniversalLayoutId
     imagePolicy?: ImagePolicy
     imageAssetPath?: string
@@ -322,9 +324,7 @@ export async function executeAddPageGeneration(
       .filter((page) => page.status === 'completed' && page.html_path && page.file_slug)
       .sort((a, b) => a.page_number - b.page_number)
     if (candidates.length === 0) return null
-    const middle = candidates.filter(
-      (_, index) => index > 0 && index < candidates.length - 1
-    )
+    const middle = candidates.filter((_, index) => index > 0 && index < candidates.length - 1)
     const pool = middle.length > 0 ? middle : candidates
     // 语义匹配：按新页规划出的角色优先选同角色的基底页（如数据页配数据基底），
     // 无匹配时退回内容页，再退回最中间页。
@@ -436,6 +436,8 @@ export async function executeAddPageGeneration(
     title: planResult.title,
     contentOutline: planResult.contentOutline,
     layoutIntent: planResult.layoutIntent,
+    visualFormat: planResult.visualFormat,
+    audienceMove: planResult.audienceMove,
     layoutId: planResult.layoutId,
     imageAssetPath: planResult.imageAssetPath,
     imageAssetPaths: planResult.imageAssetPaths,
@@ -471,8 +473,8 @@ export async function executeAddPageGeneration(
   try {
     const generationResult = await generatePagesWithRetry({
       runArgs: {
-      appendSessionEvent: (data) =>
-        db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
+        appendSessionEvent: (data) =>
+          db.appendSessionEvent({ sessionId: context.sessionId, runId: context.runId, ...data }),
         sessionId: context.sessionId,
         provider: context.provider,
         apiKey: context.apiKey,
@@ -516,6 +518,8 @@ export async function executeAddPageGeneration(
             moduleCount: planResult.moduleCount,
             visualAspect: planResult.visualAspect,
             contentDensity: planResult.contentDensity,
+            visualFormat: planResult.visualFormat,
+            audienceMove: planResult.audienceMove,
             layoutId: planResult.layoutId,
             imageAssetPath: planResult.imageAssetPath,
             imageAssetPaths: planResult.imageAssetPaths,

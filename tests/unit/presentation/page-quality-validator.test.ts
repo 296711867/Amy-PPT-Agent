@@ -104,6 +104,20 @@ describe('validatePageQuality', () => {
       const html = wrap('<div class="px-12"><h1>标题</h1></div>')
       expect(codes(validatePageQuality(html, vertical))).toContain('padding-below-floor')
     })
+
+    it('uses absolute template coordinates instead of treating every template block as a gutter', () => {
+      const html = wrap(
+        '<section style="position:absolute;left:80px;width:620px;padding:0"><h1>模板标题</h1></section><section style="position:absolute;left:860px;width:560px;padding:36px"><p>模板正文</p></section>'
+      )
+
+      expect(codes(validatePageQuality(html, wide))).toContain('padding-below-floor')
+      expect(
+        codes(validatePageQuality(html, wide, { preserveTemplateLayout: true }))
+      ).not.toContain('padding-below-floor')
+      expect(
+        codes(validatePageQuality(html, wide, { preserveTemplateLayout: true }))
+      ).not.toContain('safe-area-implicit')
+    })
   })
 
   describe('font-below-floor', () => {

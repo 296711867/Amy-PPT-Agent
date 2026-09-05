@@ -242,6 +242,11 @@ export function preprocessPageHtml(html: string): string {
       }
     })
 
+    // Models commonly emit the CSS-style alias `fade-in`. It is semantically
+    // identical to our canonical `fade`, so normalize it before the hard gate
+    // instead of spending another model call on a deterministic correction.
+    $('[data-anim="fade-in" i]').attr('data-anim', 'fade')
+
     $('canvas').each((_, node) => {
       const canvas = $(node)
       canvas.removeAttr('width')
@@ -698,7 +703,9 @@ export async function persistPageHtmlFromFragment(args: {
   }
   // Harness: 落盘前的质量校验。不达标抛 PageWriteValidationError，经 tool error
   // 回流到 agent 的 ReAct 循环，带违规清单触发自我重写，达标才落盘。
-  const harnessViolations = validatePageQuality(persisted.html, args.slideSize)
+  const harnessViolations = validatePageQuality(persisted.html, args.slideSize, {
+    preserveTemplateLayout: args.preserveTemplateSkeleton
+  })
   const harnessErrors = harnessViolations.filter((v) => v.severity === 'error')
   const qualityWarnings = harnessViolations.filter((v) => v.severity === 'warn')
   if (harnessErrors.length > 0) {
@@ -728,7 +735,7 @@ export async function persistPageHtmlFromFragment(args: {
           structureViolations.length > 0
             ? `模板结构被破坏 (${args.pageId})：${structureViolations.join('；')}`
             : '',
-          '请重新读取目标模板页，把背景图、纹理、装饰图、mask/overlay、CSS url(...) 对应结构与主要分区容器保留在 update_template_page_file 的 content 中。'
+          '请重新读取目标模板页并原位编辑：保留模板页的全部顶层分区容器及其绝对定位（背景、logo、标题块、条目块、装饰线条），只替换文字与数据；条目不够时克隆现有条目容器并按模板间距调整位置，条目多余时删除。不要把多个顶层容器合并成一个包裹容器，不要用自定义 <main> 包裹整个片段（把模板顶层容器作为 content 的直接子元素），也不要用自己的布局系统重建页面。'
         ]
           .filter(Boolean)
           .join(' ')

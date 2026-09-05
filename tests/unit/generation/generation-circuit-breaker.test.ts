@@ -3,12 +3,19 @@ import { createGenerationCircuitBreaker } from '../../../src/shared/generation-c
 import { classifyGenerationError } from '../../../src/shared/generation-error'
 
 describe('createGenerationCircuitBreaker', () => {
-  it('pauses new dispatches after the first system failure and counts matching failures', () => {
+  it('requires two matching transient system failures before pausing new dispatches', () => {
     const breaker = createGenerationCircuitBreaker()
     const failure = classifyGenerationError(new Error('fetch failed: ECONNRESET'))
 
-    expect(breaker.registerFailure(failure)).toMatchObject({ paused: true, occurrences: 1 })
+    expect(breaker.registerFailure(failure)).toMatchObject({ paused: false, occurrences: 1 })
     expect(breaker.registerFailure(failure)).toMatchObject({ paused: true, occurrences: 2 })
+  })
+
+  it('pauses immediately for a non-retryable system failure', () => {
+    const breaker = createGenerationCircuitBreaker()
+    const failure = classifyGenerationError(new Error('401 unauthorized'))
+
+    expect(breaker.registerFailure(failure)).toMatchObject({ paused: true, occurrences: 1 })
   })
 
   it('does not pause the queue for a page-scoped validation failure', () => {

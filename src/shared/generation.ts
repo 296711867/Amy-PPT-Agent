@@ -127,7 +127,13 @@ export const resolvePlannedVisualFormat = (
   normalizeVisualFormat(value) ||
   (layoutIntent ? LAYOUT_INTENT_VISUAL_FORMAT_FALLBACK[layoutIntent] : undefined)
 
-export type ImagePolicy = 'placeholder' | 'ai'
+/**
+ * 配图策略：
+ * - placeholder：为带图槽版式统一挂可替换占位图
+ * - ai：调用生图模型生成配图
+ * - none：不额外配图，沿用页面基底/版式自带视觉（模板链路默认）
+ */
+export type ImagePolicy = 'placeholder' | 'ai' | 'none'
 
 /**
  * 视觉元素偏好：用户在创建会话时指定，注入规划 prompt 让 AI 在设计大纲时
@@ -215,7 +221,7 @@ export const normalizeGenerationMode = (value: unknown): GenerationMode =>
 export const AMY_IMAGE_PLACEHOLDER_PATH = './assets/amy-image-placeholder.png'
 
 export const normalizeImagePolicy = (value: unknown): ImagePolicy =>
-  value === 'ai' ? 'ai' : 'placeholder'
+  value === 'ai' ? 'ai' : value === 'none' ? 'none' : 'placeholder'
 
 export type DeckBackgroundWhitespace =
   | 'cover-safe'

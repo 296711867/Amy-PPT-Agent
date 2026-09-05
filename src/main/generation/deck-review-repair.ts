@@ -25,6 +25,25 @@ import type { SinglePageGenerator } from './single-page-generator'
 
 export type DeckPageFailure = { pageId: string; title: string; reason: string }
 
+export const buildFailedDeckPage = (
+  page: PageRef,
+  htmlPath: string,
+  reason: string
+): Parameters<NonNullable<DeckGenerationArgs['onPageFailed']>>[0] => ({
+  pageNumber: page.pageNumber,
+  pageId: page.pageId,
+  title: page.title,
+  contentOutline: page.outline,
+  layoutIntent: page.layoutIntent,
+  visualFormat: page.visualFormat,
+  audienceMove: page.audienceMove,
+  layoutId: page.layoutId,
+  imageAssetPath: page.imageAssetPath,
+  imageAssetPaths: page.imageAssetPaths,
+  htmlPath,
+  reason
+})
+
 /** deck 质量评审结果 → session_events 载荷（纯函数，便于单测与 UI 消费）。 */
 export const buildDeckQualityReviewEventPayload = (input: {
   available: boolean
@@ -143,18 +162,9 @@ export const runDeckReviewAndRepair = async (context: {
         `Browser render validation was unavailable: ${unavailable.reason}. This slide was not accepted as complete.`
       )
       failedPages.push({ pageId: page.pageId, title: page.title, reason })
-      await args.onPageFailed?.({
-        pageNumber: page.pageNumber,
-        pageId: page.pageId,
-        title: page.title,
-        contentOutline: page.outline,
-        layoutIntent: page.layoutIntent,
-        layoutId: page.layoutId,
-        imageAssetPath: page.imageAssetPath,
-        imageAssetPaths: page.imageAssetPaths,
-        htmlPath: args.pageFileMap[page.pageId] || '',
-        reason
-      })
+      await args.onPageFailed?.(
+        buildFailedDeckPage(page, args.pageFileMap[page.pageId] || '', reason)
+      )
     }
 
     // available=false 只代表"有页面没渲染出指标"，已渲染页的评估结果（含 hard violations）
@@ -201,18 +211,7 @@ export const runDeckReviewAndRepair = async (context: {
         const reason = `Deck 质量定向修复失败：${error instanceof Error ? error.message : String(error)}`
         qualityRepairFailurePageIds.push(pageId)
         failedPages.push({ pageId, title: page.title, reason })
-        await args.onPageFailed?.({
-          pageNumber: page.pageNumber,
-          pageId,
-          title: page.title,
-          contentOutline: page.outline,
-          layoutIntent: page.layoutIntent,
-          layoutId: page.layoutId,
-          imageAssetPath: page.imageAssetPath,
-          imageAssetPaths: page.imageAssetPaths,
-          htmlPath: args.pageFileMap[pageId] || '',
-          reason
-        })
+        await args.onPageFailed?.(buildFailedDeckPage(page, args.pageFileMap[pageId] || '', reason))
       }
     }
 
@@ -228,18 +227,7 @@ export const runDeckReviewAndRepair = async (context: {
       if (!page) continue
       const reason = formatDeckQualityFeedback(remainingHardViolations, pageId)
       failedPages.push({ pageId, title: page.title, reason })
-      await args.onPageFailed?.({
-        pageNumber: page.pageNumber,
-        pageId,
-        title: page.title,
-        contentOutline: page.outline,
-        layoutIntent: page.layoutIntent,
-        layoutId: page.layoutId,
-        imageAssetPath: page.imageAssetPath,
-        imageAssetPaths: page.imageAssetPaths,
-        htmlPath: args.pageFileMap[pageId] || '',
-        reason
-      })
+      await args.onPageFailed?.(buildFailedDeckPage(page, args.pageFileMap[pageId] || '', reason))
     }
     deckQualityWarnings = deckReport.violations.filter((violation) => violation.severity === 'warn')
     await recordReviewEvent(

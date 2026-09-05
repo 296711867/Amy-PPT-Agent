@@ -1,9 +1,11 @@
 import type { BaseLanguageModel } from '@langchain/core/language_models/base'
+import * as cheerio from 'cheerio'
 import {
   CompositeBackend,
   FilesystemBackend,
   GENERAL_PURPOSE_SUBAGENT,
   type EditResult,
+  type ReadResult,
   type WriteResult
 } from 'deepagents'
 import { createProductSkillsMiddlewareSet } from '../skills/backend'
@@ -18,6 +20,7 @@ export class GuardedFilesystemBackend extends FilesystemBackend {
       editBlockedReason?: string
       writeBlockedReason?: string
       validateEditedFile?: (filePath: string) => Promise<void>
+      compactTemplatePagePath?: string
     }
   ) {
     super(options)
@@ -29,6 +32,7 @@ export class GuardedFilesystemBackend extends FilesystemBackend {
     this.writeBlockedReason =
       options.writeBlockedReason || '当前任务禁止调用 write_file。请使用受控的页面写入工具。'
     this.validateEditedFile = options.validateEditedFile
+    this.compactTemplatePagePath = options.compactTemplatePagePath
   }
 
   private readonly disableEditFile: boolean
@@ -36,6 +40,27 @@ export class GuardedFilesystemBackend extends FilesystemBackend {
   private readonly editBlockedReason: string
   private readonly writeBlockedReason: string
   private readonly validateEditedFile?: (filePath: string) => Promise<void>
+  private readonly compactTemplatePagePath?: string
+
+  async read(filePath: string, offset = 0, limit = 500): Promise<ReadResult> {
+    if (filePath.replace(/\\/g, '/') !== this.compactTemplatePagePath) {
+      return super.read(filePath, offset, limit)
+    }
+    const raw = await super.read(filePath, 0, Number.MAX_SAFE_INTEGER)
+    if (raw.error || typeof raw.content !== 'string') return raw
+
+    const $ = cheerio.load(raw.content, { scriptingEnabled: false })
+    const contentRoot = $('.ppt-page-content main[data-role="content"]').first()
+    const compactContent = contentRoot.length
+      ? contentRoot.html()
+      : $('.ppt-page-content').first().html()
+    if (!compactContent) return raw
+
+    return {
+      content: compactContent.split('\n').slice(offset, offset + limit).join('\n'),
+      mimeType: raw.mimeType
+    }
+  }
 
   async write(filePath: string, content: string): Promise<WriteResult> {
     if (this.disableWriteFile) return { error: this.writeBlockedReason }

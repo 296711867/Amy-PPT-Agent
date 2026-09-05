@@ -8,6 +8,7 @@ import { normalizeUniversalLayoutId } from '@shared/universal-layouts'
 import {
   MAX_SELECTED_PAGES,
   MAX_STYLE_SWITCH_PAGES,
+  normalizeVisualFormat,
   type DesignContract,
   type GeneratedPagePayload
 } from '@shared/generation'
@@ -170,6 +171,12 @@ export async function executeDeckAllPageEditGeneration(
       !context.resetVisualStyle ? normalizeUniversalLayoutId(page.layout_id) : undefined
     ])
   )
+  const visualFormatByPageId = new Map(
+    latestPageSnapshot.map((page) => [page.page_id, normalizeVisualFormat(page.visual_format)])
+  )
+  const audienceMoveByPageId = new Map(
+    latestPageSnapshot.map((page) => [page.page_id, page.audience_move || undefined])
+  )
   const imageAssetPathByPageId = new Map(
     latestPageSnapshot.map((page) => [page.page_id, page.image_asset_path || undefined])
   )
@@ -180,6 +187,8 @@ export async function executeDeckAllPageEditGeneration(
     title: ref.title,
     contentOutline: outlineByPageId.get(ref.pageId) || '',
     layoutIntent: layoutIntentByPageId.get(ref.pageId),
+    visualFormat: visualFormatByPageId.get(ref.pageId),
+    audienceMove: audienceMoveByPageId.get(ref.pageId),
     layoutId: layoutIdByPageId.get(ref.pageId),
     imageAssetPath: imageAssetPathByPageId.get(ref.pageId),
     imageAssetPaths: imageAssetPathsByPageId.get(ref.pageId)
@@ -470,6 +479,8 @@ export async function executeDeckAllPageEditGeneration(
           title: pageRef.title,
           contentOutline: outlineItem?.contentOutline || '',
           layoutIntent: outlineItem?.layoutIntent,
+          visualFormat: outlineItem?.visualFormat,
+          audienceMove: outlineItem?.audienceMove,
           layoutId: outlineItem?.layoutId,
           imageAssetPath: outlineItem?.imageAssetPath,
           imageAssetPaths: outlineItem?.imageAssetPaths,
@@ -532,6 +543,8 @@ export async function executeDeckAllPageEditGeneration(
           title: pageRef.title,
           contentOutline: outlineItem?.contentOutline || '',
           layoutIntent: outlineItem?.layoutIntent,
+          visualFormat: outlineItem?.visualFormat,
+          audienceMove: outlineItem?.audienceMove,
           layoutId: outlineItem?.layoutId,
           imageAssetPath: outlineItem?.imageAssetPath,
           imageAssetPaths: outlineItem?.imageAssetPaths,
